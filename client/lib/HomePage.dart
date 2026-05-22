@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'LoginPage.dart';
 import 'api_client.dart';
+import 'AccountPage.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -577,66 +578,15 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     // pages for bottom navigation
     final pages = <Widget>[
-      // Main home content (existing layout)
+      // 1. Home
       SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _HeaderBar(
-                searchController: _searchController,
-                onFilterPressed: _showFilterSheet,
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.black12),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x14000000),
-                        blurRadius: 20,
-                        offset: Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _filteredItems.isEmpty
-                      ? const Center(
-                          child: Text('Belum ada item. Tambahkan item dulu.'),
-                        )
-                      : GridView.builder(
-                          itemCount: _filteredItems.length,
-                          padding: const EdgeInsets.only(bottom: 90),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                                mainAxisExtent: 310,
-                              ),
-                          itemBuilder: (context, index) {
-                            final item = _filteredItems[index];
-                            return _ItemCard(
-                              item: item,
-                              onAddToCart: _addToCart,
-                            );
-                          },
-                        ),
-                ),
-              ),
-            ],
-          ),
+          child: _buildHomePage(), 
         ),
       ),
 
-      // Promo page: items on promo or with discount
+      // 2. Promo page
       SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -644,7 +594,7 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
 
-      // Cart page (placeholder for now)
+      // 3. Cart page
       SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -652,11 +602,30 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
 
-      // Account / Settings page
+      // 4. Account page
       SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: _buildAccountPage(),
+          child: AccountPage(
+            username: _accountUsernameController.text.isNotEmpty 
+                ? _accountUsernameController.text 
+                : 'User Baru',
+            email: _accountEmailController.text.isNotEmpty 
+                ? _accountEmailController.text 
+                : 'Email belum diisi',
+            onLogout: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+              );
+            },
+            onEditProfile: () {
+              _showEditProfileDialog();
+            },
+            onChangePassword: () {
+              _showMessage('Fitur ganti password akan datang.');
+            },
+          ),
         ),
       ),
     ];
@@ -1081,259 +1050,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
-  Widget _buildAccountPage() {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Pengaturan Akun',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          _buildProfileSummaryCard(),
-          const SizedBox(height: 12),
-          _buildLocationCard(),
-          const SizedBox(height: 12),
-          _buildDarkModeCard(),
-          const SizedBox(height: 12),
-          _buildLogoutCard(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfileSummaryCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: Colors.green.shade100,
-                child: Icon(Icons.person, color: Colors.green.shade800),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _accountUsernameController.text.isEmpty
-                          ? 'Nama akun belum diisi'
-                          : _accountUsernameController.text,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _accountEmailController.text.isEmpty
-                          ? 'Email belum diisi'
-                          : _accountEmailController.text,
-                      style: TextStyle(color: Colors.grey.shade700),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _accountAddressController.text.isEmpty
-                ? 'Alamat belum diisi'
-                : _accountAddressController.text,
-            style: const TextStyle(fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _showEditProfileDialog,
-              icon: const Icon(Icons.edit),
-              label: const Text('Edit Profile'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLocationCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6F8F3),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.location_on, color: Colors.green.shade700),
-              const SizedBox(width: 8),
-              const Text(
-                'Lokasi',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              Chip(
-                label: Text(
-                  _locationStatus,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _detectedLocationText,
-            style: TextStyle(color: Colors.grey.shade800),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: _detectCurrentLocation,
-                  icon: const Icon(Icons.my_location),
-                  label: const Text('Detect Location'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDarkModeCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.dark_mode_outlined),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Dark Mode',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                SizedBox(height: 4),
-                Text('Tampilan gelap langsung aktif setelah diubah.'),
-              ],
-            ),
-          ),
-          Switch(
-            value: _darkMode,
-            onChanged: (v) async {
-              setState(() => _darkMode = v);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('dark_mode', v);
-              _showMessage('Dark mode ${v ? 'aktif' : 'non-aktif'}.');
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogoutCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.red.shade100),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Keluar akun',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Logout akan membawa kamu kembali ke halaman login.',
-            style: TextStyle(color: Colors.red.shade700),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red.shade700,
-                side: BorderSide(color: Colors.red.shade300),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              onPressed: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    title: const Text('Logout dari akun?'),
-                    content: const Text(
-                      'Kamu akan keluar dan perlu login lagi untuk masuk.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        child: const Text('Batal'),
-                      ),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red.shade700,
-                        ),
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        child: const Text('Logout'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed == true) {
-                  if (!mounted) return;
-                  final navigator = Navigator.of(context);
-                  navigator.pushReplacement(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                  );
-                }
-              },
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _HeaderBar extends StatelessWidget {
   const _HeaderBar({
