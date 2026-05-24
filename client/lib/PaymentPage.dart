@@ -205,6 +205,11 @@ class _PaymentPageState extends State<PaymentPage> {
                       backgroundColor: Colors.green.shade700,
                     ),
                     child: const Text('Lanjut ke Checkout'),
+                    onPressed: _submitPayment,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                    ),
+                    child: const Text('Bayar Sekarang'),
                   ),
                 ),
               ],
