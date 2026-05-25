@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'CheckoutPage.dart';
+import 'ChatPage.dart';
+import 'HistoryPage.dart';
 
 class PaymentPage extends StatefulWidget {
   const PaymentPage({
@@ -57,6 +59,18 @@ class _PaymentPageState extends State<PaymentPage> {
     Navigator.of(context).pop(true);
   }
 
+  void _openHistoryPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const HistoryPage()),
+    );
+  }
+
+  void _openChatPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ChatPage()),
+    );
+  }
+
   void _goToCheckout() async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
@@ -83,6 +97,22 @@ class _PaymentPageState extends State<PaymentPage> {
       appBar: AppBar(
         title: const Text('Pembayaran'),
         backgroundColor: Colors.green.shade700,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: GestureDetector(
+              onTap: _openChatPage,
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: Colors.blue.shade700,
+                child: const Icon(
+                  Icons.chat_bubble_outline,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -121,6 +151,17 @@ class _PaymentPageState extends State<PaymentPage> {
                         ],
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _openHistoryPage,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                    ),
+                    child: const Text('Lihat Riwayat Transaksi'),
                   ),
                 ),
                 const SizedBox(height: 24),
