@@ -1,7 +1,8 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
@@ -85,65 +86,214 @@ class PinGate {
       return false;
     }
 
+    if (!context.mounted) {
+      return false;
+    }
+
     final enteredPin = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
         final controller = TextEditingController();
-        bool obscurePin = true;
+
+        void updatePin(
+          String nextValue,
+          void Function(void Function()) setState,
+        ) {
+          if (nextValue.length > 6) return;
+          setState(() {
+            controller.text = nextValue;
+            controller.selection = TextSelection.collapsed(
+              offset: controller.text.length,
+            );
+          });
+        }
+
+        Widget pinCircle(bool filled) {
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: filled ? Colors.green.shade700 : Colors.transparent,
+              border: Border.all(color: Colors.green.shade700, width: 1.8),
+            ),
+          );
+        }
+
+        Widget numButton(
+          String label,
+          void Function(void Function()) setState,
+        ) {
+          return SizedBox(
+            width: 74,
+            height: 74,
+            child: FilledButton(
+              onPressed: () => updatePin(controller.text + label, setState),
+              style: FilledButton.styleFrom(
+                shape: const CircleBorder(),
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        }
 
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+            final pinLength = controller.text.length.clamp(0, 6).toInt();
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 24,
               ),
-              title: const Text('Masukkan PIN'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Untuk $purpose, masukkan PIN 6 digit.',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    obscureText: obscurePin,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    decoration: InputDecoration(
-                      labelText: 'PIN 6 digit',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          obscurePin ? Icons.visibility_off : Icons.visibility,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(dialogContext).size.height * 0.82,
+                  maxWidth: 420,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 4),
+                        Text(
+                          'Masukkan PIN',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.green.shade800,
+                          ),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            obscurePin = !obscurePin;
-                          });
-                        },
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Untuk $purpose, masukkan PIN 6 digit.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            6,
+                            (index) => Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              child: pinCircle(index < pinLength),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                numButton('1', setState),
+                                numButton('2', setState),
+                                numButton('3', setState),
+                              ],
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                numButton('4', setState),
+                                numButton('5', setState),
+                                numButton('6', setState),
+                              ],
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                numButton('7', setState),
+                                numButton('8', setState),
+                                numButton('9', setState),
+                              ],
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                SizedBox(
+                                  width: 74,
+                                  height: 74,
+                                  child: OutlinedButton(
+                                    onPressed: pinLength == 0
+                                        ? null
+                                        : () => updatePin(
+                                            controller.text.substring(
+                                              0,
+                                              controller.text.length - 1,
+                                            ),
+                                            setState,
+                                          ),
+                                    style: OutlinedButton.styleFrom(
+                                      shape: const CircleBorder(),
+                                    ),
+                                    child: const Icon(Icons.backspace_outlined),
+                                  ),
+                                ),
+                                numButton('0', setState),
+                                SizedBox(
+                                  width: 74,
+                                  height: 74,
+                                  child: TextButton(
+                                    onPressed: () => updatePin('', setState),
+                                    style: TextButton.styleFrom(
+                                      shape: const CircleBorder(),
+                                    ),
+                                    child: const Icon(Icons.refresh),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                child: const Text('Batal'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: pinLength == 6
+                                    ? () {
+                                        Navigator.of(
+                                          dialogContext,
+                                        ).pop(controller.text.trim());
+                                      }
+                                    : null,
+                                child: const Text('Lanjut'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Batal'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop(controller.text.trim());
-                  },
-                  child: const Text('Lanjut'),
-                ),
-              ],
             );
           },
         );

@@ -23,6 +23,14 @@ export class UpdateItemDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  sellerName?: string;
+
+  @IsOptional()
+  @IsString()
+  sellerEmail?: string;
+
+  @IsOptional()
   @IsBoolean()
   isAvailable?: boolean;
 

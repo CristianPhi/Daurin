@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'pin_gate.dart';
 
@@ -128,6 +129,12 @@ class _RegisterPageState extends State<RegisterPage> {
           username: _usernameController.text.trim(),
           pin: _pinController.text.trim(),
         );
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'account_username',
+          _usernameController.text.trim(),
+        );
+        await prefs.setString('account_email', _emailController.text.trim());
         await _showStatusDialog(
           title: 'Register Berhasil',
           message: 'Akun berhasil dibuat, silakan login.',

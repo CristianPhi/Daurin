@@ -33,6 +33,14 @@ export class CreateItemDto {
 
   @IsOptional()
   @IsString()
+  sellerName?: string;
+
+  @IsOptional()
+  @IsString()
+  sellerEmail?: string;
+
+  @IsOptional()
+  @IsString()
   imageUrl?: string;
 
   @Type(() => Boolean)

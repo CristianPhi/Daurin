@@ -6,6 +6,8 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { ItemsModule } from './items/items.module';
 import { CartModule } from './cart/cart.module';
+import { ChatModule } from './chat/chat.module';
+import { TransactionsModule } from './transactions/transactions.module';
 
 function sanitizeMongoUri(uri: string): string {
   const authMatch = uri.match(
@@ -54,15 +56,18 @@ function sanitizeMongoUri(uri: string): string {
           configService.get<string>('MONGODB_URI') ??
           'mongodb://localhost:27017/daurin',
         ),
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 5000,
-        socketTimeoutMS: 10000,
+        // Increase timeouts to allow for slower network / SRV resolution
+        serverSelectionTimeoutMS: 20000,
+        connectTimeoutMS: 20000,
+        socketTimeoutMS: 30000,
         bufferCommands: false,
       }),
     }),
     AuthModule,
     ItemsModule,
     CartModule,
+    ChatModule,
+    TransactionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'CheckoutPage.dart';
+
 import 'ChatPage.dart';
+import 'CheckoutPage.dart';
 import 'HistoryPage.dart';
 
 class PaymentPage extends StatefulWidget {
@@ -30,13 +31,19 @@ class PaymentPage extends StatefulWidget {
 class _PaymentPageState extends State<PaymentPage> {
   String _selectedMethod = 'COD';
 
-  bool get _isQris => _selectedMethod == 'QRIS';
-
-  void _submitPayment() {
-    Navigator.of(context).pop(true);
+  void _openHistoryPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const HistoryPage()));
   }
 
-  void _goToCheckout() async {
+  void _openChatPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+  }
+
+  Future<void> _goToCheckout() async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => CheckoutPage(
@@ -48,46 +55,30 @@ class _PaymentPageState extends State<PaymentPage> {
           userAddress: widget.userAddress,
           paymentMethod: _selectedMethod,
           qrisImageAssetPath: widget.qrisImageAssetPath,
+          showQris: true,
         ),
       ),
     );
 
     if (result != null && result['confirmed'] == true) {
       if (!mounted) return;
-      _submitPayment();
+      Navigator.of(context).pop(true);
     }
   }
 
-  void _openHistoryPage() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const HistoryPage()),
-    );
-  }
-
-  void _openChatPage() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ChatPage()),
-    );
-  }
-
-  void _goToCheckout() async {
-    final result = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(
-        builder: (_) => CheckoutPage(
-          cartItems: widget.cartItems,
-          subtotal: widget.subtotal,
-          discount: widget.discount,
-          total: widget.total,
-          voucherCode: widget.voucherCode,
-          userAddress: widget.userAddress,
+  Widget _buildSummaryRow(String label, int amount, {bool bold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label),
+        Text(
+          amount < 0 ? '-Rp ${amount.abs()}' : 'Rp $amount',
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
-      ),
+      ],
     );
-
-    if (result != null && result['confirmed'] == true) {
-      if (!mounted) return;
-      _submitPayment();
-    }
   }
 
   @override
@@ -96,6 +87,7 @@ class _PaymentPageState extends State<PaymentPage> {
       appBar: AppBar(
         title: const Text('Pembayaran'),
         backgroundColor: Colors.green.shade700,
+        foregroundColor: Colors.white,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -116,7 +108,7 @@ class _PaymentPageState extends State<PaymentPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -137,14 +129,6 @@ class _PaymentPageState extends State<PaymentPage> {
                         _buildSummaryRow('Subtotal', widget.subtotal),
                         const SizedBox(height: 8),
                         _buildSummaryRow('Diskon voucher', -widget.discount),
-                        const SizedBox(height: 8),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        _buildSummaryRow(
-                          'Total bayar',
-                          widget.total,
-                          isBold: true,
-                        ),
                         if (widget.voucherCode != null) ...[
                           const SizedBox(height: 12),
                           Text(
@@ -152,45 +136,58 @@ class _PaymentPageState extends State<PaymentPage> {
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ],
+                        const Divider(height: 24),
+                        _buildSummaryRow(
+                          'Total bayar',
+                          widget.total,
+                          bold: true,
+                        ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _openHistoryPage,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700,
-                    ),
-                    child: const Text('Lihat Riwayat Transaksi'),
-                  ),
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 const Text(
-                  'Pilih Metode Pembayaran',
+                  'Metode Pembayaran',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: const ['COD', 'QRIS'].map((method) {
-                    final isSelected = _selectedMethod == method;
-                    return ChoiceChip(
-                      label: Text(method),
-                      selected: isSelected,
-                      onSelected: (_) {
-                        setState(() {
-                          _selectedMethod = method;
-                        });
-                      },
-                    );
-                  }).toList(),
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: ['COD', 'QRIS'].map((method) {
+                        final selected = _selectedMethod == method;
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: ChoiceChip(
+                              label: Text(method),
+                              selected: selected,
+                              onSelected: (_) {
+                                setState(() {
+                                  _selectedMethod = method;
+                                });
+                              },
+                              selectedColor: Colors.green.shade100,
+                              labelStyle: TextStyle(
+                                color: selected
+                                    ? Colors.green.shade800
+                                    : Colors.black87,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                if (_isQris) ...[
+                const SizedBox(height: 16),
+                if (_selectedMethod == 'QRIS')
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -199,72 +196,34 @@ class _PaymentPageState extends State<PaymentPage> {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: Colors.green.shade100),
                     ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Scan QRIS di bawah ini',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: widget.qrisImageAssetPath.isNotEmpty
-                              ? Image.asset(
-                                  widget.qrisImageAssetPath,
-                                  fit: BoxFit.contain,
-                                  height: 260,
-                                  width: double.infinity,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      height: 260,
-                                      width: double.infinity,
-                                      color: Colors.white,
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        'Isi gambar QRIS di:\n${widget.qrisImageAssetPath}',
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          color: Colors.black54,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Container(
-                                  height: 260,
-                                  width: double.infinity,
-                                  color: Colors.white,
-                                  alignment: Alignment.center,
-                                  child: const Text(
-                                    'Isi gambar QRIS di qrisImageAssetPath',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.black54),
-                                  ),
-                                ),
-                        ),
-                      ],
+                    child: const Text(
+                      'QRIS belum ditampilkan di sini. Tekan Lanjut ke Konfirmasi untuk melihat QRIS.',
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                ] else ...[
+                  )
+                else
                   const Text(
                     'COD dipilih. Kurir akan menerima pembayaran saat barang diterima.',
                     style: TextStyle(color: Colors.black54),
                   ),
-                ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: _goToCheckout,
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green.shade700,
-                    ),
-                    child: const Text('Lanjut ke Checkout'),
-                    onPressed: _submitPayment,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: const Text('Lanjut ke Konfirmasi'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _openHistoryPage,
+                    child: const Text('Lihat Riwayat Transaksi'),
                   ),
                 ),
               ],
@@ -272,21 +231,6 @@ class _PaymentPageState extends State<PaymentPage> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSummaryRow(String label, int amount, {bool isBold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label),
-        Text(
-          'Rp $amount',
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ],
     );
   }
 }

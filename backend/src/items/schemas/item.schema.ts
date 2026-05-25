@@ -20,6 +20,12 @@ export class Item {
   @Prop({ required: false, trim: true })
   description?: string;
 
+  @Prop({ required: false, trim: true })
+  sellerName?: string;
+
+  @Prop({ required: false, trim: true, lowercase: true })
+  sellerEmail?: string;
+
   @Prop()
   imageUrl?: string;
 

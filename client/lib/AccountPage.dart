@@ -344,14 +344,25 @@ class AccountPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final surfaceColor = isDarkMode
+        ? colorScheme.surfaceContainerHighest
+        : Colors.white;
+    final textColor = isDarkMode ? colorScheme.onSurface : Colors.black87;
+    final mutedTextColor = isDarkMode
+        ? colorScheme.onSurfaceVariant
+        : Colors.black54;
+
     return SingleChildScrollView(
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: surfaceColor,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.black12),
+          border: Border.all(
+            color: isDarkMode ? Colors.white12 : Colors.black12,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,7 +374,9 @@ class AccountPage extends StatelessWidget {
                 child: Text(
                   username.isNotEmpty ? username[0].toUpperCase() : 'U',
                   style: TextStyle(
-                    color: Colors.green.shade800,
+                    color: isDarkMode
+                        ? colorScheme.primaryContainer
+                        : Colors.green.shade800,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
@@ -374,31 +387,34 @@ class AccountPage extends StatelessWidget {
             Center(
               child: Text(
                 username,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  color: textColor,
                 ),
               ),
             ),
             const SizedBox(height: 4),
             Center(
-              child: Text(email, style: const TextStyle(color: Colors.black54)),
+              child: Text(email, style: TextStyle(color: mutedTextColor)),
             ),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: isDarkMode ? colorScheme.surface : Colors.green.shade50,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.green.shade100),
+                border: Border.all(
+                  color: isDarkMode ? Colors.white12 : Colors.green.shade100,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.my_location, color: Colors.green.shade700),
+                      Icon(Icons.my_location, color: colorScheme.primary),
                       const SizedBox(width: 8),
                       const Text(
                         'Location',
@@ -415,138 +431,10 @@ class AccountPage extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    locationText,
-                    style: const TextStyle(color: Colors.black54),
-                  ),
+                  Text(locationText, style: TextStyle(color: mutedTextColor)),
                 ],
               ),
             ),
-            const SizedBox(height: 18),
-            Text(
-              'Voucher Saya',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.green.shade800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (selectedVoucherCode != null)
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Voucher aktif: $selectedVoucherCode',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (vouchers.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Text(
-                  'Tidak ada voucher tersedia saat ini.',
-                  style: TextStyle(color: Colors.black54),
-                ),
-              )
-            else
-              Column(children: vouchers.map(_buildVoucherCard).toList()),
-            const SizedBox(height: 18),
-            if (recommendedVoucher != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.green.shade100),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Colors.green),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'Voucher rekomendasi untuk keranjang Anda',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    _buildVoucherCard(recommendedVoucher!),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-            ],
-            Text(
-              'Voucher Saya',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: Colors.green.shade800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (selectedVoucherCode != null)
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Voucher aktif: $selectedVoucherCode',
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            if (vouchers.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Text(
-                  'Tidak ada voucher tersedia saat ini.',
-                  style: TextStyle(color: Colors.black54),
-                ),
-              )
-            else
-              Column(children: vouchers.map(_buildVoucherCard).toList()),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
