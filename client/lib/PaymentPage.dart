@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'CheckoutPage.dart';
+import 'ChatPage.dart';
+import 'HistoryPage.dart';
 
 class PaymentPage extends StatefulWidget {
   const PaymentPage({
@@ -56,12 +58,60 @@ class _PaymentPageState extends State<PaymentPage> {
     }
   }
 
+  void _openHistoryPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const HistoryPage()),
+    );
+  }
+
+  void _openChatPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ChatPage()),
+    );
+  }
+
+  void _goToCheckout() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => CheckoutPage(
+          cartItems: widget.cartItems,
+          subtotal: widget.subtotal,
+          discount: widget.discount,
+          total: widget.total,
+          voucherCode: widget.voucherCode,
+          userAddress: widget.userAddress,
+        ),
+      ),
+    );
+
+    if (result != null && result['confirmed'] == true) {
+      if (!mounted) return;
+      _submitPayment();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pembayaran'),
         backgroundColor: Colors.green.shade700,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: GestureDetector(
+              onTap: _openChatPage,
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: Colors.blue.shade700,
+                child: const Icon(
+                  Icons.chat_bubble_outline,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -104,6 +154,17 @@ class _PaymentPageState extends State<PaymentPage> {
                         ],
                       ],
                     ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _openHistoryPage,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                    ),
+                    child: const Text('Lihat Riwayat Transaksi'),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -195,6 +256,11 @@ class _PaymentPageState extends State<PaymentPage> {
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: _goToCheckout,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                    ),
+                    child: const Text('Lanjut ke Checkout'),
+                    onPressed: _submitPayment,
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green.shade700,
                     ),

@@ -365,6 +365,12 @@ class _HomePageState extends State<HomePage> {
 
     // Buat list item untuk checkout
     final List<Map<String, dynamic>> cartItems = _cart
+        .map((cartItem) => {
+              'name': cartItem.item.name,
+              'quantity': cartItem.quantity,
+              'price': cartItem.item.price,
+              'subtotal': cartItem.item.price * cartItem.quantity,
+            })
         .map(
           (cartItem) => {
             'name': cartItem.item.name,
