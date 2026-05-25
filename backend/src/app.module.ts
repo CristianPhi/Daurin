@@ -58,7 +58,6 @@ function sanitizeMongoUri(uri: string): string {
           configService.get<string>('MONGODB_URI') ??
           'mongodb://127.0.0.1:27017/daurin',
         ),
-        // Fail fast when MongoDB is unavailable to avoid hanging HTTP requests.
         serverSelectionTimeoutMS: 5000,
         connectTimeoutMS: 5000,
         socketTimeoutMS: 10000,

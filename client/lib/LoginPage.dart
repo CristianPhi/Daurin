@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'api_client.dart';
 import 'HomePage.dart';
 import 'RegisterPage.dart';
+import 'pin_gate.dart';
+
+final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,8 +20,15 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final Future<void> _googleSignInInit = _googleSignIn.initialize();
   bool _isLoading = false;
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_googleSignInInit);
+  }
 
   Future<void> _showStatusDialog({
     required String title,
@@ -99,6 +109,18 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        final Map<String, dynamic>? data =
+            jsonDecode(response.body) as Map<String, dynamic>?;
+        final user = data?['user'];
+        if (user is Map<String, dynamic>) {
+          final email = user['email']?.toString() ?? '';
+          final username = user['username']?.toString() ?? '';
+          if (email.isNotEmpty) {
+            await PinGate.setActiveAccountIdentifier(email);
+          } else if (username.isNotEmpty) {
+            await PinGate.setActiveAccountIdentifier(username);
+          }
+        }
         await _showStatusDialog(
           title: 'Login Berhasil',
           message: 'Selamat datang di Daurin.',
@@ -173,6 +195,66 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+
+    try {
+      await _googleSignInInit;
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+
+      if (!mounted) return;
+
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+
+      final response = await postJsonWithFallback(
+        path: '/auth/google',
+        body: jsonEncode({
+          'idToken': googleAuth.idToken,
+          'email': googleUser.email,
+          'displayName': googleUser.displayName,
+          'photoUrl': googleUser.photoUrl,
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        await PinGate.setActiveAccountIdentifier(googleUser.email);
+        await _showStatusDialog(
+          title: 'Login Berhasil',
+          message:
+              'Selamat datang, ${googleUser.displayName ?? googleUser.email}!',
+          isSuccess: true,
+        );
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+        return;
+      }
+
+      final Map<String, dynamic>? data =
+          jsonDecode(response.body) as Map<String, dynamic>?;
+      await _showStatusDialog(
+        title: 'Login Google Gagal',
+        message: data?['message'] is String
+            ? data!['message']
+            : 'Gagal masuk dengan Google. Coba lagi.',
+        isSuccess: false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      await _showStatusDialog(
+        title: 'Koneksi Gagal',
+        message: 'Tidak bisa login dengan Google: ${error.toString()}',
+        isSuccess: false,
+      );
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
