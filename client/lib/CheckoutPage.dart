@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'pin_gate.dart';
+
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({
     super.key,
@@ -9,6 +11,10 @@ class CheckoutPage extends StatefulWidget {
     required this.total,
     this.voucherCode,
     required this.userAddress,
+    required this.userAddress,
+    required this.paymentMethod,
+    this.voucherCode,
+    this.qrisImageAssetPath = 'assets/images/qris.png',
   });
 
   final List<Map<String, dynamic>> cartItems;
@@ -17,6 +23,10 @@ class CheckoutPage extends StatefulWidget {
   final int total;
   final String? voucherCode;
   final String userAddress;
+  final String userAddress;
+  final String paymentMethod;
+  final String? voucherCode;
+  final String qrisImageAssetPath;
 
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
@@ -52,6 +62,177 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _accountNameController.dispose();
     _goPeyPhoneController.dispose();
     super.dispose();
+  late String _selectedMethod;
+  bool _agreedToTerms = false;
+  bool _qrisPaid = false;
+  bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMethod = widget.paymentMethod == 'QRIS' ? 'QRIS' : 'COD';
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  Widget _buildPaymentRow(
+    String label,
+    int amount, {
+    bool isBold = false,
+    bool isDiscount = false,
+    bool isTotal = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            fontSize: isTotal ? 16 : 14,
+            color: isDiscount ? Colors.green : null,
+          ),
+        ),
+        Text(
+          '${amount >= 0 ? '' : '-'}Rp ${amount.abs()}',
+          style: TextStyle(
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            fontSize: isTotal ? 16 : 14,
+            color: isTotal ? Colors.green.shade700 : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMethodCard() {
+    if (_selectedMethod == 'QRIS') {
+      return Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Text(
+                'Pembayaran QRIS',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    widget.qrisImageAssetPath,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(
+                          Icons.qr_code_2,
+                          size: 120,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Total: Rp ${widget.total}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Scan QRIS di atas lalu centang bahwa pembayaran sudah selesai.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Cash on Delivery (COD)',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Pembayaran dilakukan saat barang diterima. Tidak ada tindakan tambahan di halaman ini.',
+                style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmCheckout() async {
+    if (!_agreedToTerms) {
+      _showError('Silakan setujui syarat dan ketentuan terlebih dahulu');
+      return;
+    }
+
+    if (_selectedMethod == 'QRIS' && !_qrisPaid) {
+      _showError('Centang bahwa kamu sudah melakukan pembayaran QRIS.');
+      return;
+    }
+
+    final allowed = await PinGate.requirePin(
+      context,
+      messenger: ScaffoldMessenger.of(context),
+      purpose: 'konfirmasi pembayaran',
+    );
+    if (!allowed) {
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    await Future.delayed(const Duration(seconds: 1));
+
+    if (!mounted) return;
+
+    setState(() {
+      _isProcessing = false;
+    });
+
+    Navigator.of(context).pop(<String, dynamic>{
+      'confirmed': true,
+      'paymentMethod': _selectedMethod,
+    });
   }
 
   @override
@@ -69,6 +250,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Ringkasan Pesanan
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 const Text(
                   'Ringkasan Pesanan',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -109,6 +294,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                 ],
                               ),
                             )),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...widget.cartItems.map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${item['name']} x${item['quantity']}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text('Rp ${item['subtotal']}'),
+                              ],
+                            ),
+                          ),
+                        ),
                         const Divider(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -118,6 +326,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                               '${widget.cartItems.length} item(s)',
                               style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
+                            Text('${widget.cartItems.length} item(s)'),
                           ],
                         ),
                       ],
@@ -138,6 +347,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
+                    padding: const EdgeInsets.all(12),
                     child: Text(
                       widget.userAddress.isNotEmpty
                           ? widget.userAddress
@@ -244,6 +454,43 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 const SizedBox(height: 20),
 
                 // Syarat dan Ketentuan
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: ['COD', 'QRIS'].map((method) {
+                    final isSelected = _selectedMethod == method;
+                    return ChoiceChip(
+                      label: Text(method),
+                      selected: isSelected,
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedMethod = method;
+                          _qrisPaid = false;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 20),
+                _buildMethodCard(),
+                if (_selectedMethod == 'QRIS') ...[
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _qrisPaid,
+                    onChanged: (value) {
+                      setState(() {
+                        _qrisPaid = value ?? false;
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Saya sudah membayar QRIS'),
+                    subtitle: const Text(
+                      'Centang ini setelah pembayaran selesai.',
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Checkbox(
@@ -273,6 +520,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         onPressed: () {
                           Navigator.of(context).pop();
                         },
+                        onPressed: () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           side: BorderSide(color: Colors.green.shade700),
@@ -286,6 +534,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         onPressed: _agreedToTerms && !_isProcessing
                             ? _confirmCheckout
                             : null,
+                        onPressed: _isProcessing ? null : _confirmCheckout,
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.green.shade700,
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -302,6 +551,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                 ),
                               )
                             : const Text('Konfirmasi Pembayaran'),
+                            : Text(
+                                _selectedMethod == 'QRIS'
+                                    ? 'Saya Sudah Bayar'
+                                    : 'Selesaikan COD',
+                              ),
                       ),
                     ),
                   ],
@@ -322,6 +576,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       Expanded(
                         child: Text(
                           'Data pembayaran Anda aman dan terenkripsi',
+                          'Konfirmasi pembayaran akan meminta PIN 6 digit akun Anda.',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.blue.shade700,
