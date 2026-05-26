@@ -43,6 +43,48 @@ class _PaymentPageState extends State<PaymentPage> {
 
   bool get _needsCardInfo => _selectedMethod == 'Kartu Kredit/Debit';
 
+  int get _estimatedDistanceKm {
+    if (widget.userAddress.isEmpty) return 10;
+    final normalizedAddress = widget.userAddress.toLowerCase();
+    final itemLocations = widget.cartItems
+        .map((item) => (item['location']?.toString() ?? '').toLowerCase())
+        .where((loc) => loc.isNotEmpty)
+        .toList();
+
+    if (itemLocations.any((loc) => normalizedAddress.contains(loc))) {
+      return 3;
+    }
+
+    if (itemLocations.any((loc) {
+      final firstPart = loc.split(',').first.trim();
+      return firstPart.isNotEmpty && normalizedAddress.contains(firstPart);
+    })) {
+      return 5;
+    }
+
+    if (normalizedAddress.contains('jakarta') ||
+        itemLocations.any((loc) => loc.contains('jakarta'))) {
+      return 12;
+    }
+
+    return 20;
+  }
+
+  int get _shippingFee {
+    final distanceKm = _estimatedDistanceKm;
+    if (distanceKm <= 5) return 10000;
+    if (distanceKm <= 12) return 15000;
+    if (distanceKm <= 20) return 22000;
+    return 30000;
+  }
+
+  int get _adminFee {
+    final computed = (widget.subtotal * 0.02).round();
+    return computed < 5000 ? 5000 : computed;
+  }
+
+  int get _totalWithFees => widget.total + _shippingFee + _adminFee;
+
   void _submitPayment() {
     if (_needsCardInfo) {
       if (_cardNumberController.text.trim().isEmpty ||
@@ -78,7 +120,9 @@ class _PaymentPageState extends State<PaymentPage> {
           cartItems: widget.cartItems,
           subtotal: widget.subtotal,
           discount: widget.discount,
-          total: widget.total,
+          total: _totalWithFees,
+          adminFee: _adminFee,
+          shippingFee: _shippingFee,
           voucherCode: widget.voucherCode,
           userAddress: widget.userAddress,
         ),
@@ -141,9 +185,21 @@ class _PaymentPageState extends State<PaymentPage> {
                         const SizedBox(height: 8),
                         _buildSummaryRow('Diskon voucher', -widget.discount),
                         const SizedBox(height: 8),
+                        _buildSummaryRow('Biaya admin', _adminFee),
+                        const SizedBox(height: 8),
+                        _buildSummaryRow('Ongkir', _shippingFee),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Estimasi jarak: ${_estimatedDistanceKm} km',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         const Divider(),
                         const SizedBox(height: 8),
-                        _buildSummaryRow('Total bayar', widget.total, isBold: true),
+                        _buildSummaryRow('Total bayar', _totalWithFees, isBold: true),
                         if (widget.voucherCode != null) ...[
                           const SizedBox(height: 12),
                           Text(

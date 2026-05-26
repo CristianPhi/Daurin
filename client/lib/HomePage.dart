@@ -369,6 +369,7 @@ class _HomePageState extends State<HomePage> {
               'name': cartItem.item.name,
               'quantity': cartItem.quantity,
               'price': cartItem.item.price,
+              'location': cartItem.item.location,
               'subtotal': cartItem.item.price * cartItem.quantity,
             })
         .toList();
@@ -986,11 +987,63 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     ];
+    final pageTheme = _darkMode
+        ? ThemeData.dark(useMaterial3: true).copyWith(
+            scaffoldBackgroundColor: const Color(0xFF121212),
+            cardColor: const Color(0xFF1E1E1E),
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green.shade700,
+                side: BorderSide(color: Colors.green.shade700),
+              ),
+            ),
+            textTheme: ThemeData.dark(useMaterial3: true)
+                .textTheme
+                .apply(
+                  bodyColor: Colors.white,
+                  displayColor: Colors.white,
+                ),
+          )
+        : ThemeData.light(useMaterial3: true).copyWith(
+            scaffoldBackgroundColor: const Color(0xFFF6F8F3),
+            cardColor: Colors.white,
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green.shade700,
+                side: BorderSide(color: Colors.green.shade700),
+              ),
+            ),
+          );
+
     final titles = ['Daurin', 'Promo', 'Keranjang', 'Akun'];
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8F3),
-      appBar: AppBar(
+    return Theme(
+      data: pageTheme,
+      child: Scaffold(
+        backgroundColor: pageTheme.scaffoldBackgroundColor,
+        appBar: AppBar(
         title: Text(titles[_selectedIndex]),
         centerTitle: false,
         backgroundColor: Colors.green.shade700,

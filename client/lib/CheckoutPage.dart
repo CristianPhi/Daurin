@@ -7,6 +7,8 @@ class CheckoutPage extends StatefulWidget {
     required this.subtotal,
     required this.discount,
     required this.total,
+    required this.adminFee,
+    required this.shippingFee,
     this.voucherCode,
     required this.userAddress,
   });
@@ -15,6 +17,8 @@ class CheckoutPage extends StatefulWidget {
   final int subtotal;
   final int discount;
   final int total;
+  final int adminFee;
+  final int shippingFee;
   final String? voucherCode;
   final String userAddress;
 
@@ -170,6 +174,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                           -widget.discount,
                           isDiscount: true,
                         ),
+                        _buildPaymentRow('Biaya Admin', widget.adminFee),
+                        _buildPaymentRow('Ongkir', widget.shippingFee),
                         if (widget.voucherCode != null) ...[
                           const SizedBox(height: 8),
                           Text(
