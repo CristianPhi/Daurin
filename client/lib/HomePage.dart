@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -8,7 +10,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'LoginPage.dart';
 import 'api_client.dart';
 import 'AccountPage.dart';
+import 'ChatPage.dart';
 import 'PaymentPage.dart';
+import 'HistoryPage.dart';
+import 'pin_gate.dart';
+import 'app_theme_controller.dart';
 
 const List<String> _standardLocations = [
   'Jabodetabek',
@@ -50,28 +56,26 @@ class _HomePageState extends State<HomePage> {
   // Voucher and payment
   final List<Voucher> _vouchers = [
     Voucher(
-      id: 'VCHR10',
-      title: 'Diskon 10%',
-      description: 'Potongan harga untuk belanja kamu.',
-      discountPercent: 10,
+      id: 'VCHR30',
+      title: 'Diskon 30%',
+      description: 'Potongan harga tanpa minimum pembelian.',
+      discountPercent: 30,
       expiresOn: '30 Juni 2026',
-      minCartValue: 100000,
     ),
     Voucher(
-      id: 'VCHR20',
+      id: 'VCHR20K',
       title: 'Diskon 20%',
-      description: 'Cocok untuk belanja lebih hemat.',
+      description: 'Potongan harga dengan minimum pembelian.',
       discountPercent: 20,
       expiresOn: '15 Juli 2026',
-      minCartValue: 200000,
+      minCartValue: 30000,
     ),
     Voucher(
-      id: 'VCHR30REC',
-      title: 'Diskon 30% Recycle',
-      description: 'Lebih hemat untuk item kategori recycle.',
-      discountPercent: 30,
+      id: 'VCHRONGKIR3',
+      title: 'Gratis Ongkir 3',
+      description: 'Voucher gratis ongkir untuk pembelian kamu.',
+      discountPercent: 0,
       expiresOn: '31 Juli 2026',
-      requiredCategory: 'Recycle',
     ),
   ];
   String? _appliedVoucherCode;
@@ -106,7 +110,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _darkMode = prefs.getBool('dark_mode') ?? false;
+      _darkMode =
+          prefs.getBool('dark_mode') ??
+          AppThemeController.instance.darkMode.value;
       _accountAddressController.text = prefs.getString('account_address') ?? '';
       _accountUsernameController.text =
           prefs.getString('account_username') ?? '';
@@ -117,9 +123,18 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  String? get _currentAccountName {
+    final value = _accountUsernameController.text.trim();
+    return value.isEmpty ? null : value;
+  }
+
+  String? get _currentAccountEmail {
+    final value = _accountEmailController.text.trim();
+    return value.isEmpty ? null : value;
+  }
+
   Future<void> _setDarkMode(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dark_mode', value);
+    await AppThemeController.instance.setDarkMode(value);
     if (!mounted) return;
     setState(() {
       _darkMode = value;
@@ -140,7 +155,7 @@ class _HomePageState extends State<HomePage> {
 
   void _onTabChanged(int index) {
     setState(() => _selectedIndex = index);
-    if (index == 3 && !_showedAccountIntro) {
+    if (index == 4 && !_showedAccountIntro) {
       _showedAccountIntro = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -267,6 +282,18 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _runProtectedAction(Future<void> Function() action) async {
+    final allowed = await PinGate.requirePin(
+      context,
+      messenger: ScaffoldMessenger.of(context),
+      purpose: 'aksi sensitif akun',
+    );
+    if (!allowed) {
+      return;
+    }
+    await action();
+  }
+
   Voucher? get _recommendedVoucher {
     if (_cart.isEmpty) return null;
     final eligible = _vouchers.where((voucher) {
@@ -345,7 +372,8 @@ class _HomePageState extends State<HomePage> {
         conditions.add('kategori ${voucher.requiredCategory}');
       }
       _showMessage(
-          'Voucher tidak memenuhi syarat: ${conditions.join(' dan ')}.');
+        'Voucher tidak memenuhi syarat: ${conditions.join(' dan ')}.',
+      );
       return;
     }
 
@@ -374,12 +402,45 @@ class _HomePageState extends State<HomePage> {
             })
         .toList();
 
+        .map(
+          (cartItem) => {
+            'itemId': cartItem.item.id,
+            'name': cartItem.item.name,
+            'quantity': cartItem.quantity,
+            'price': cartItem.item.price,
+            'subtotal': cartItem.item.price * cartItem.quantity,
+            'image': cartItem.item.imageUrl,
+            'sellerName': cartItem.item.sellerName,
+            'sellerEmail': cartItem.item.sellerEmail,
+            'threadId':
+                cartItem.item.sellerEmail == null ||
+                    cartItem.item.sellerEmail!.isEmpty ||
+                    _currentAccountEmail == null
+                ? null
+                : '${cartItem.item.id.trim().toLowerCase()}__${cartItem.item.sellerEmail!.trim().toLowerCase()}__${_currentAccountEmail!.toLowerCase()}',
+          },
+        )
+        .toList();
+
+    // Calculate admin fee (1500 per transaction)
+    const int adminFee = 1500;
+
+    // Calculate shipping fee (5000 per transaction as base, could be based on distance later)
+    // For now: 5000 base + 1000 per item for simplicity
+    final int shippingFee = 5000 + (_cart.length * 1000);
+
+    // Update total: subtotal + adminFee + shippingFee - discount
+    final int finalTotal =
+        _cartTotal + adminFee + shippingFee - _discountAmount;
+
     final paid = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => PaymentPage(
           subtotal: _cartTotal,
+          adminFee: adminFee,
+          shippingFee: shippingFee,
           discount: _discountAmount,
-          total: _finalCartTotal,
+          total: finalTotal,
           voucherCode: _appliedVoucherCode,
           cartItems: cartItems,
           userAddress: _accountAddressController.text,
@@ -520,6 +581,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _addToCart(_Item item) {
+    if (item.quantity <= 0) {
+      _showMessage('${item.name} sedang sold out.');
+      return;
+    }
     final existing = _cart.indexWhere((c) => c.item.id == item.id);
     setState(() {
       if (existing >= 0) {
@@ -531,6 +596,45 @@ class _HomePageState extends State<HomePage> {
       }
     });
     _showMessage('${item.name} ditambahkan ke keranjang');
+  }
+
+  Future<void> _openSellerChat(_Item item) async {
+    final sellerName = item.sellerName?.trim();
+    final sellerEmail = item.sellerEmail?.trim();
+    final buyerName = _currentAccountName;
+    final buyerEmail = _currentAccountEmail;
+
+    if (buyerName == null || buyerEmail == null) {
+      _showMessage('Data akun belum lengkap. Login dulu untuk chat seller.');
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    final hasSellerData =
+        sellerName != null &&
+        sellerName.isNotEmpty &&
+        sellerEmail != null &&
+        sellerEmail.isNotEmpty;
+    final threadId = hasSellerData
+        ? '${item.id.trim().toLowerCase()}__${sellerEmail.toLowerCase()}__${buyerEmail.toLowerCase()}'
+        : 'draft__${item.id.trim().toLowerCase()}__${buyerEmail.toLowerCase()}';
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          threadId: threadId,
+          itemId: item.id,
+          itemName: item.name,
+          sellerName: sellerName ?? 'Chat baru',
+          sellerEmail: sellerEmail,
+          buyerName: buyerName,
+          buyerEmail: buyerEmail,
+          draftMode: !hasSellerData,
+        ),
+      ),
+    );
   }
 
   void _removeFromCart(String itemId) {
@@ -582,6 +686,7 @@ class _HomePageState extends State<HomePage> {
     final customLocationController = TextEditingController();
     final descriptionController = TextEditingController();
     final discountPercentController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
     final customCategoryController = TextEditingController();
     final imagePicker = ImagePicker();
     String? selectedPhotoPath;
@@ -626,6 +731,24 @@ class _HomePageState extends State<HomePage> {
                           final parsed = int.tryParse(value.trim());
                           if (parsed == null || parsed < 0) {
                             return 'Harga harus angka positif';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: quantityController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Quantity/Stok',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Quantity wajib diisi';
+                          }
+                          final parsed = int.tryParse(value.trim());
+                          if (parsed == null || parsed < 0) {
+                            return 'Quantity harus angka 0 atau lebih';
                           }
                           return null;
                         },
@@ -759,7 +882,9 @@ class _HomePageState extends State<HomePage> {
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black12),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -793,7 +918,11 @@ class _HomePageState extends State<HomePage> {
                               selectedPhotoPath == null
                                   ? 'Belum ada foto dipilih'
                                   : 'Foto dipilih',
-                              style: const TextStyle(color: Colors.black54),
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                           TextButton.icon(
@@ -802,7 +931,9 @@ class _HomePageState extends State<HomePage> {
                                 : () async {
                                     final picked = await imagePicker.pickImage(
                                       source: ImageSource.gallery,
-                                      imageQuality: 85,
+                                      imageQuality: 70,
+                                      maxWidth: 1600,
+                                      maxHeight: 1600,
                                     );
                                     if (picked != null) {
                                       setDialogState(() {
@@ -842,9 +973,21 @@ class _HomePageState extends State<HomePage> {
                               : selectedCategory;
                           final discountText = discountPercentController.text
                               .trim();
+                          final quantityText = quantityController.text.trim();
                           final discountPercentValue = discountText.isEmpty
                               ? 0
                               : int.parse(discountText);
+                          final quantityValue = int.parse(quantityText);
+
+                          final navigator = Navigator.of(context);
+                          final allowed = await PinGate.requirePin(
+                            context,
+                            messenger: ScaffoldMessenger.of(context),
+                            purpose: 'upload barang',
+                          );
+                          if (!allowed) {
+                            return;
+                          }
 
                           setState(() {
                             _isSubmitting = true;
@@ -852,19 +995,27 @@ class _HomePageState extends State<HomePage> {
                           setDialogState(() {});
 
                           try {
-                            final navigator = Navigator.of(context);
+                            final itemFields = <String, String>{
+                              'name': nameController.text.trim(),
+                              'price': priceController.text.trim(),
+                              'quantity': quantityValue.toString(),
+                              'location': locationValue,
+                              'discountPercent': discountPercentValue
+                                  .toString(),
+                              'category': categoryValue,
+                              'description': descriptionController.text.trim(),
+                            };
+
+                            if (_currentAccountName != null) {
+                              itemFields['sellerName'] = _currentAccountName!;
+                            }
+                            if (_currentAccountEmail != null) {
+                              itemFields['sellerEmail'] = _currentAccountEmail!;
+                            }
+
                             final response =
                                 await postMultipartItemWithFallback(
-                                  fields: {
-                                    'name': nameController.text.trim(),
-                                    'price': priceController.text.trim(),
-                                    'location': locationValue,
-                                    'discountPercent': discountPercentValue
-                                        .toString(),
-                                    'category': categoryValue,
-                                    'description': descriptionController.text
-                                        .trim(),
-                                  },
+                                  fields: itemFields,
                                   photoPath: selectedPhotoPath,
                                 );
                             if (!mounted) {
@@ -945,11 +1096,19 @@ class _HomePageState extends State<HomePage> {
       SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
+          child: const HistoryPage(),
+        ),
+      ),
+
+      // 4. Cart page
+      SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: _buildCartPage(),
         ),
       ),
 
-      // 4. Account page
+      // 5. Account page
       SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -964,7 +1123,9 @@ class _HomePageState extends State<HomePage> {
             onToggleDarkMode: _setDarkMode,
             locationStatus: _locationStatus,
             locationText: _detectedLocationText,
-            onDetectLocation: _detectCurrentLocation,
+            onDetectLocation: () {
+              _runProtectedAction(_detectCurrentLocation);
+            },
             onLogout: () {
               Navigator.pushReplacement(
                 context,
@@ -972,10 +1133,12 @@ class _HomePageState extends State<HomePage> {
               );
             },
             onEditProfile: () {
-              _showEditProfileDialog();
+              _runProtectedAction(_showEditProfileDialog);
             },
             onChangePassword: () {
-              _showMessage('Fitur ganti password akan datang.');
+              _runProtectedAction(() async {
+                _showMessage('Fitur ganti password akan datang.');
+              });
             },
             onAboutUs: _showAboutUsDialog,
             onFaq: _showFaqDialog,
@@ -1044,6 +1207,11 @@ class _HomePageState extends State<HomePage> {
       child: Scaffold(
         backgroundColor: pageTheme.scaffoldBackgroundColor,
         appBar: AppBar(
+    final titles = ['Daurin', 'Promo', 'History', 'Keranjang', 'Akun'];
+
+    return Scaffold(
+      backgroundColor: _pageBackgroundColor,
+      appBar: AppBar(
         title: Text(titles[_selectedIndex]),
         centerTitle: false,
         backgroundColor: Colors.green.shade700,
@@ -1108,6 +1276,7 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.local_offer),
             label: 'Promo',
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
           BottomNavigationBarItem(
             icon: Icon(Icons.shopping_cart),
             label: 'Cart',
@@ -1115,7 +1284,7 @@ class _HomePageState extends State<HomePage> {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Akun'),
         ],
         selectedItemColor: Colors.green.shade700,
-        unselectedItemColor: Colors.black54,
+        unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
         type: BottomNavigationBarType.fixed,
       ),
     );
@@ -1126,7 +1295,9 @@ class _HomePageState extends State<HomePage> {
       return Center(
         child: Text(
           'Keranjang kosong',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -1135,7 +1306,9 @@ class _HomePageState extends State<HomePage> {
       children: [
         Card(
           margin: const EdgeInsets.symmetric(vertical: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -1148,10 +1321,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Subtotal'),
-                    Text('Rp $_cartTotal'),
-                  ],
+                  children: [const Text('Subtotal'), Text('Rp $_cartTotal')],
                 ),
                 if (_discountAmount > 0) ...[
                   const SizedBox(height: 8),
@@ -1185,7 +1355,9 @@ class _HomePageState extends State<HomePage> {
           Card(
             color: Colors.green.shade50,
             margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -1202,12 +1374,18 @@ class _HomePageState extends State<HomePage> {
                   if (_recommendedVoucher!.minCartValue != null)
                     Text(
                       'Syarat: minimal belanja Rp ${_recommendedVoucher!.minCartValue}',
-                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
                     ),
                   if (_recommendedVoucher!.requiredCategory != null)
                     Text(
                       'Kategori: ${_recommendedVoucher!.requiredCategory}',
-                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
                     ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -1225,7 +1403,7 @@ class _HomePageState extends State<HomePage> {
         Expanded(
           child: ListView.separated(
             itemCount: _cart.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemBuilder: (context, idx) {
               final ci = _cart[idx];
@@ -1246,6 +1424,17 @@ class _HomePageState extends State<HomePage> {
                             width: 70,
                             height: 70,
                             fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: 70,
+                                height: 70,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.image_not_supported),
+                              );
+                            },
                           ),
                         )
                       else
@@ -1272,7 +1461,8 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(height: 6),
                             Text('Rp ${ci.item.price} x ${ci.quantity}'),
-                            if (ci.item.discountPercent != null && ci.item.discountPercent! > 0)
+                            if (ci.item.discountPercent != null &&
+                                ci.item.discountPercent! > 0)
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),
                                 child: Text(
@@ -1293,7 +1483,9 @@ class _HomePageState extends State<HomePage> {
                             onPressed: () {
                               if (ci.quantity > 1) {
                                 setState(() {
-                                  _cart[idx] = ci.copyWith(quantity: ci.quantity - 1);
+                                  _cart[idx] = ci.copyWith(
+                                    quantity: ci.quantity - 1,
+                                  );
                                 });
                               } else {
                                 _removeFromCart(ci.item.id);
@@ -1305,7 +1497,9 @@ class _HomePageState extends State<HomePage> {
                             icon: const Icon(Icons.add_circle_outline),
                             onPressed: () {
                               setState(() {
-                                _cart[idx] = ci.copyWith(quantity: ci.quantity + 1);
+                                _cart[idx] = ci.copyWith(
+                                  quantity: ci.quantity + 1,
+                                );
                               });
                             },
                           ),
@@ -1357,6 +1551,13 @@ class _HomePageState extends State<HomePage> {
   int? _priceMin;
   int? _priceMax;
   String? _priceSort; // 'asc' or 'desc'
+
+  Color get _pageBackgroundColor =>
+      _darkMode ? const Color(0xFF0E1116) : const Color(0xFFF6F8F3);
+
+  Color get _surfaceColor => _darkMode ? const Color(0xFF191F26) : Colors.white;
+
+  Color get _borderColor => _darkMode ? Colors.white12 : Colors.black12;
 
   void _showFilterSheet() {
     // Fixed category choices per spec
@@ -1600,7 +1801,9 @@ class _HomePageState extends State<HomePage> {
       return Center(
         child: Text(
           'Belum ada promo saat ini.',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -1608,14 +1811,16 @@ class _HomePageState extends State<HomePage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surfaceColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.black12),
+        border: Border.all(color: _borderColor),
       ),
       child: Column(
         children: [
           Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             margin: const EdgeInsets.only(bottom: 16),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -1626,18 +1831,20 @@ class _HomePageState extends State<HomePage> {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
+                      children: [
+                        const Text(
                           'Diskon & Promo',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 6),
+                        const SizedBox(height: 6),
                         Text(
                           'Lihat penawaran khusus dan item diskon yang dapat kamu tambahkan ke keranjang.',
-                          style: TextStyle(color: Colors.black54),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -1654,10 +1861,13 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                mainAxisExtent: 310,
+                mainAxisExtent: 338,
               ),
-              itemBuilder: (context, index) =>
-                  _ItemCard(item: promoItems[index], onAddToCart: _addToCart),
+              itemBuilder: (context, index) => _ItemCard(
+                item: promoItems[index],
+                onAddToCart: _addToCart,
+                onChatSeller: _openSellerChat,
+              ),
             ),
           ),
         ],
@@ -1688,7 +1898,9 @@ class _HomePageState extends State<HomePage> {
               ),
               Text(
                 '${visibleItems.length} hasil',
-                style: const TextStyle(color: Colors.black54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -1702,23 +1914,29 @@ class _HomePageState extends State<HomePage> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: _surfaceColor,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.black12),
+                border: Border.all(color: _borderColor),
               ),
-              child: const Column(
+              child: Column(
                 children: [
-                  Icon(Icons.search_off, size: 48, color: Colors.black38),
-                  SizedBox(height: 12),
-                  Text(
+                  Icon(
+                    Icons.search_off,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
                     'Belum ada item yang cocok.',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Text(
                     'Coba ubah kata kunci atau filter untuk menemukan item lain.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black54),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -1733,10 +1951,13 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                mainAxisExtent: 310,
+                mainAxisExtent: 338,
               ),
-              itemBuilder: (context, index) =>
-                  _ItemCard(item: visibleItems[index], onAddToCart: _addToCart),
+              itemBuilder: (context, index) => _ItemCard(
+                item: visibleItems[index],
+                onAddToCart: _addToCart,
+                onChatSeller: _openSellerChat,
+              ),
             ),
           const SizedBox(height: 96),
         ],
@@ -1790,7 +2011,9 @@ class _HeaderBar extends StatelessWidget {
             decoration: InputDecoration(
               hintText: 'Cari barang yang kamu butuhkan disini',
               filled: true,
-              fillColor: Colors.white,
+              fillColor: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF2A313A)
+                  : Colors.white,
               prefixIcon: const Icon(Icons.search),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.filter_list),
@@ -1810,185 +2033,447 @@ class _HeaderBar extends StatelessWidget {
 }
 
 class _ItemCard extends StatelessWidget {
-  const _ItemCard({required this.item, this.onAddToCart});
+  const _ItemCard({required this.item, this.onAddToCart, this.onChatSeller});
 
   final _Item item;
   final void Function(_Item)? onAddToCart;
+  final Future<void> Function(_Item)? onChatSeller;
 
   @override
   Widget build(BuildContext context) {
+    final isSoldOut = item.quantity <= 0;
+
     return InkWell(
       onTap: () => _showDetail(context),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF6F8F3),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF1C2229)
+              : const Color(0xFFF6F8F3),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black12),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white12
+                : Colors.black12,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Badges row at top left - compact
-            if (item.isPromoted ||
-                (item.discountPercent != null && item.discountPercent! > 0))
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: [
-                  if (item.isPromoted)
-                    Container(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: isSoldOut
+                      ? ImageFilter.blur(sigmaX: 1.8, sigmaY: 1.8)
+                      : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+                  child: Opacity(
+                    opacity: isSoldOut ? 0.55 : 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.sellerName?.isNotEmpty == true
+                                    ? item.sellerName!
+                                    : 'Seller belum diisi',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.green.shade800,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (onChatSeller != null)
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => onChatSeller!(item),
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.9,
+                                      ),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.green.shade200,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.chat_bubble_outline,
+                                      size: 16,
+                                      color: Colors.green.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        if (item.isPromoted ||
+                            (item.discountPercent != null &&
+                                item.discountPercent! > 0))
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isSoldOut
+                                      ? Colors.grey.shade200
+                                      : Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  isSoldOut
+                                      ? 'SOLD OUT'
+                                      : 'STOK ${item.quantity}',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: isSoldOut
+                                        ? Colors.grey.shade700
+                                        : Colors.blue.shade800,
+                                  ),
+                                ),
+                              ),
+                              if (item.isPromoted)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    'PROMO',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.deepOrange,
+                                    ),
+                                  ),
+                                ),
+                              if (item.discountPercent != null &&
+                                  item.discountPercent! > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade100,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    '${item.discountPercent}% OFF',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green.shade800,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        if (!item.isPromoted &&
+                            (item.discountPercent == null ||
+                                item.discountPercent! <= 0))
+                          Text(
+                            isSoldOut
+                                ? 'SOLD OUT'
+                                : 'Sisa stok: ${item.quantity}',
+                            style: TextStyle(
+                              color: isSoldOut
+                                  ? Colors.grey.shade700
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 1),
+                        const SizedBox(height: 6),
+                        if (item.imageUrl != null &&
+                            item.imageUrl!.isNotEmpty) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              buildApiUrl(item.imageUrl!),
+                              width: double.infinity,
+                              height: 120,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: double.infinity,
+                                  height: 120,
+                                  color: Colors.grey.shade200,
+                                  alignment: Alignment.center,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.image_not_supported,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Gambar tidak bisa dimuat',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                    if (loadingProgress == null) {
+                                      return child;
+                                    }
+                                    return Container(
+                                      width: double.infinity,
+                                      height: 120,
+                                      color: Colors.grey.shade200,
+                                      alignment: Alignment.center,
+                                      child: const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        if (item.discountedPrice != null &&
+                            item.discountedPrice! < item.price) ...[
+                          Text(
+                            'Rp ${item.price}',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w500,
+                              decoration: TextDecoration.lineThrough,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Rp ${item.discountedPrice}',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ] else ...[
+                          Text(
+                            'Rp ${item.price}',
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 3),
+                        Text(
+                          item.location,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (item.category != null &&
+                            item.category!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.category!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.green.shade800,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (item.description != null &&
+                            item.description!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.description!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        if (item.promoNote != null &&
+                            item.promoNote!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.promoNote!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.deepOrange,
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        if (!isSoldOut && onChatSeller != null)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: onAddToCart == null
+                                      ? null
+                                      : () => onAddToCart!(item),
+                                  icon: const Icon(
+                                    Icons.add_shopping_cart,
+                                    size: 16,
+                                  ),
+                                  label: const Text('Add'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green.shade700,
+                                    minimumSize: const Size(72, 36),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => onChatSeller!(item),
+                                  icon: const Icon(
+                                    Icons.chat_bubble_outline,
+                                    size: 16,
+                                  ),
+                                  label: const Text('Chat'),
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(72, 36),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else if (!isSoldOut)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              ElevatedButton.icon(
+                                onPressed: onAddToCart == null
+                                    ? null
+                                    : () => onAddToCart!(item),
+                                icon: const Icon(
+                                  Icons.add_shopping_cart,
+                                  size: 16,
+                                ),
+                                label: const Text('Add'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade700,
+                                  minimumSize: const Size(72, 36),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'Sold out',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade800,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (isSoldOut)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    alignment: Alignment.center,
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
+                        horizontal: 18,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
+                        color: Colors.grey.shade700.withValues(alpha: 0.92),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: const Text(
-                        'PROMO',
+                        'SOLD OUT',
                         style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepOrange,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
-                  if (item.discountPercent != null && item.discountPercent! > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade100,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${item.discountPercent}% OFF',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade800,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            if (item.isPromoted ||
-                (item.discountPercent != null && item.discountPercent! > 0))
-              const SizedBox(height: 8),
-            if (item.imageUrl != null && item.imageUrl!.isNotEmpty) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  buildApiUrl(item.imageUrl!),
-                  width: double.infinity,
-                  height: 120,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-            Text(
-              item.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-            const SizedBox(height: 6),
-            if (item.discountedPrice != null &&
-                item.discountedPrice! < item.price) ...[
-              Text(
-                'Rp ${item.price}',
-                style: const TextStyle(
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w500,
-                  decoration: TextDecoration.lineThrough,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Rp ${item.discountedPrice}',
-                style: TextStyle(
-                  color: Colors.green.shade700,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-            ] else ...[
-              Text(
-                'Rp ${item.price}',
-                style: TextStyle(
-                  color: Colors.green.shade700,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-            const SizedBox(height: 3),
-            Text(
-              item.location,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.black54, fontSize: 12),
-            ),
-            if (item.category != null && item.category!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                item.category!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.green.shade800,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-            if (item.description != null && item.description!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                item.description!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.black54, fontSize: 12),
-              ),
-            ],
-            if (item.promoNote != null && item.promoNote!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                item.promoNote!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.deepOrange,
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-            const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: onAddToCart == null
-                      ? null
-                      : () => onAddToCart!(item),
-                  icon: const Icon(Icons.add_shopping_cart, size: 16),
-                  label: const Text('Add'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
-                    minimumSize: const Size(72, 36),
                   ),
                 ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2013,6 +2498,15 @@ class _ItemCard extends StatelessWidget {
                     width: double.infinity,
                     height: 160,
                     fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: double.infinity,
+                        height: 160,
+                        color: Colors.grey.shade200,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.image_not_supported),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -2027,6 +2521,10 @@ class _ItemCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text('Lokasi: ${item.location}'),
+              if (item.sellerName != null && item.sellerName!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text('Seller: ${item.sellerName}'),
+              ],
               if (item.category != null && item.category!.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
@@ -2047,7 +2545,7 @@ class _ItemCard extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
+            child: const Text('Tutup'),
           ),
           FilledButton.icon(
             onPressed: onAddToCart == null
@@ -2059,6 +2557,17 @@ class _ItemCard extends StatelessWidget {
             icon: const Icon(Icons.add_shopping_cart),
             label: const Text('Add to cart'),
           ),
+          if (item.sellerEmail != null &&
+              item.sellerEmail!.isNotEmpty &&
+              onChatSeller != null)
+            FilledButton.icon(
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                await onChatSeller!(item);
+              },
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Chat Seller'),
+            ),
         ],
       ),
     );
@@ -2071,6 +2580,7 @@ class _Item {
     required this.name,
     required this.price,
     required this.location,
+    this.quantity = 1,
     this.imageUrl,
     this.isPromoted = false,
     this.discountPercent,
@@ -2078,12 +2588,15 @@ class _Item {
     this.promoNote,
     this.category,
     this.description,
+    this.sellerName,
+    this.sellerEmail,
   });
 
   final String id;
   final String name;
   final int price;
   final String location;
+  final int quantity;
   final String? imageUrl;
   final bool isPromoted;
   final int? discountPercent;
@@ -2091,6 +2604,8 @@ class _Item {
   final String? promoNote;
   final String? category;
   final String? description;
+  final String? sellerName;
+  final String? sellerEmail;
 
   factory _Item.fromJson(Map<String, dynamic> json) {
     final dynamic priceValue = json['price'];
@@ -2108,6 +2623,7 @@ class _Item {
       name: (json['name'] ?? '').toString(),
       price: parsedPrice,
       location: (json['location'] ?? '').toString(),
+      quantity: _parseOptionalInt(json['quantity']) ?? 1,
       imageUrl: json['imageUrl']?.toString(),
       isPromoted:
           json['isPromoted'] == true ||
@@ -2117,6 +2633,8 @@ class _Item {
       promoNote: json['promoNote']?.toString(),
       category: json['category']?.toString(),
       description: json['description']?.toString(),
+      sellerName: json['sellerName']?.toString(),
+      sellerEmail: json['sellerEmail']?.toString(),
     );
   }
 

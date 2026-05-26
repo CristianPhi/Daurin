@@ -37,7 +37,7 @@ class Voucher {
 
 class AccountPage extends StatelessWidget {
   const AccountPage({
-    Key? key,
+    super.key,
     required this.username,
     required this.email,
     required this.isDarkMode,
@@ -54,7 +54,7 @@ class AccountPage extends StatelessWidget {
     required this.recommendedVoucher,
     required this.onUseVoucher,
     this.selectedVoucherCode,
-  }) : super(key: key);
+  });
 
   final String username;
   final String email;
@@ -77,6 +77,7 @@ class AccountPage extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -86,78 +87,88 @@ class AccountPage extends StatelessWidget {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SwitchListTile.adaptive(
-                      value: darkModeValue,
-                      onChanged: (value) {
-                        setSheetState(() {
-                          darkModeValue = value;
-                        });
-                        onToggleDarkMode(value);
-                      },
-                      title: const Text('Dark Mode'),
-                      secondary: const Icon(Icons.dark_mode_outlined),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.my_location),
-                      title: const Text('Detect Location'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        onDetectLocation();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.edit),
-                      title: const Text('Edit Profile'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        onEditProfile();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.lock),
-                      title: const Text('Change Password'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        onChangePassword();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.info_outline),
-                      title: const Text('About Us'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        onAboutUs();
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.help_outline),
-                      title: const Text('FAQ'),
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        onFaq();
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                        ),
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          onLogout();
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SwitchListTile.adaptive(
+                        value: darkModeValue,
+                        onChanged: (value) {
+                          setSheetState(() {
+                            darkModeValue = value;
+                          });
+                          onToggleDarkMode(value);
                         },
-                        icon: const Icon(Icons.logout),
-                        label: const Text('Logout'),
+                        title: const Text('Dark Mode'),
+                        secondary: const Icon(Icons.dark_mode_outlined),
                       ),
-                    ),
-                  ],
+                      ListTile(
+                        leading: const Icon(Icons.confirmation_number_outlined),
+                        title: const Text('Voucher Diskon'),
+                        subtitle: const Text('Lihat dan pakai voucher aktif'),
+                        onTap: () {
+                          _showVoucherSheet(sheetContext);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.my_location),
+                        title: const Text('Detect Location'),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          onDetectLocation();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.edit),
+                        title: const Text('Edit Profile'),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          onEditProfile();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.lock),
+                        title: const Text('Change Password'),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          onChangePassword();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: const Text('About Us'),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          onAboutUs();
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.help_outline),
+                        title: const Text('FAQ'),
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          onFaq();
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                          ),
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            onLogout();
+                          },
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Logout'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -171,6 +182,74 @@ class AccountPage extends StatelessWidget {
     final theme = Theme.of(context);
     final mutedText = theme.colorScheme.onSurface.withOpacity(0.7);
 
+  void _showVoucherSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Voucher Diskon',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  if (recommendedVoucher != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.green.shade100),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Voucher rekomendasi',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildVoucherCard(recommendedVoucher!),
+                        ],
+                      ),
+                    ),
+                  if (vouchers.isNotEmpty) ...vouchers.map(_buildVoucherCard),
+                  if (vouchers.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Text(
+                        'Tidak ada voucher tersedia saat ini.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVoucherCard(Voucher voucher) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       margin: const EdgeInsets.only(bottom: 12),
@@ -199,6 +278,8 @@ class AccountPage extends StatelessWidget {
                     color: voucher.isUsed
                         ? theme.colorScheme.surfaceVariant
                         : theme.colorScheme.primaryContainer,
+                        ? Colors.grey.shade200
+                        : Colors.green.shade50,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -207,6 +288,8 @@ class AccountPage extends StatelessWidget {
                       color: voucher.isUsed
                           ? theme.colorScheme.onSurface.withOpacity(0.6)
                           : theme.colorScheme.primary,
+                          ? Colors.grey.shade600
+                          : Colors.green.shade800,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -216,7 +299,8 @@ class AccountPage extends StatelessWidget {
             const SizedBox(height: 8),
             Text(voucher.description),
             const SizedBox(height: 10),
-            if (voucher.minCartValue != null || voucher.requiredCategory != null) ...[
+            if (voucher.minCartValue != null ||
+                voucher.requiredCategory != null) ...[
               if (voucher.minCartValue != null)
                 Text(
                   'Syarat: minimal belanja Rp ${voucher.minCartValue}',
@@ -234,6 +318,12 @@ class AccountPage extends StatelessWidget {
                 Chip(
                   label: Text('${voucher.discountPercent}%'),
                   backgroundColor: theme.colorScheme.primaryContainer,
+                  label: Text(
+                    voucher.discountPercent == 0
+                        ? 'FREE'
+                        : '${voucher.discountPercent}%',
+                  ),
+                  backgroundColor: Colors.green.shade50,
                 ),
                 const SizedBox(width: 10),
                 Text('Expires ${voucher.expiresOn}'),
@@ -243,7 +333,9 @@ class AccountPage extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: voucher.isUsed ? null : () => onUseVoucher(voucher.id),
+                onPressed: voucher.isUsed
+                    ? null
+                    : () => onUseVoucher(voucher.id),
                 style: FilledButton.styleFrom(
                   backgroundColor: voucher.isUsed
                       ? theme.colorScheme.onSurface.withOpacity(0.12)
@@ -251,8 +343,12 @@ class AccountPage extends StatelessWidget {
                   foregroundColor: voucher.isUsed
                       ? theme.colorScheme.onSurface.withOpacity(0.38)
                       : theme.colorScheme.onPrimary,
+                      ? Colors.grey.shade400
+                      : Colors.green.shade700,
                 ),
-                child: Text(voucher.isUsed ? 'Sudah digunakan' : 'Gunakan Voucher'),
+                child: Text(
+                  voucher.isUsed ? 'Sudah digunakan' : 'Gunakan Voucher',
+                ),
               ),
             ),
           ],
@@ -266,6 +362,14 @@ class AccountPage extends StatelessWidget {
     final theme = Theme.of(context);
     final mutedText = theme.colorScheme.onSurface.withOpacity(0.7);
     final surfaceVariant = theme.colorScheme.surfaceVariant;
+    final colorScheme = Theme.of(context).colorScheme;
+    final surfaceColor = isDarkMode
+        ? colorScheme.surfaceContainerHighest
+        : Colors.white;
+    final textColor = isDarkMode ? colorScheme.onSurface : Colors.black87;
+    final mutedTextColor = isDarkMode
+        ? colorScheme.onSurfaceVariant
+        : Colors.black54;
 
     return SingleChildScrollView(
       child: Container(
@@ -275,6 +379,11 @@ class AccountPage extends StatelessWidget {
           color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: theme.colorScheme.outline.withOpacity(0.12)),
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: isDarkMode ? Colors.white12 : Colors.black12,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,6 +396,9 @@ class AccountPage extends StatelessWidget {
                   username.isNotEmpty ? username[0].toUpperCase() : 'U',
                   style: TextStyle(
                     color: theme.colorScheme.primary,
+                    color: isDarkMode
+                        ? colorScheme.primaryContainer
+                        : Colors.green.shade800,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
@@ -297,9 +409,10 @@ class AccountPage extends StatelessWidget {
             Center(
               child: Text(
                 username,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  color: textColor,
                 ),
               ),
             ),
@@ -309,6 +422,7 @@ class AccountPage extends StatelessWidget {
                 email,
                 style: TextStyle(color: mutedText),
               ),
+              child: Text(email, style: TextStyle(color: mutedTextColor)),
             ),
             const SizedBox(height: 12),
             Container(
@@ -318,6 +432,11 @@ class AccountPage extends StatelessWidget {
                 color: theme.colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: theme.colorScheme.primary.withOpacity(0.24)),
+                color: isDarkMode ? colorScheme.surface : Colors.green.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDarkMode ? Colors.white12 : Colors.green.shade100,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,6 +444,7 @@ class AccountPage extends StatelessWidget {
                   Row(
                     children: [
                       Icon(Icons.my_location, color: theme.colorScheme.primary),
+                      Icon(Icons.my_location, color: colorScheme.primary),
                       const SizedBox(width: 8),
                       const Text(
                         'Location',
@@ -345,6 +465,7 @@ class AccountPage extends StatelessWidget {
                     locationText,
                     style: TextStyle(color: mutedText),
                   ),
+                  Text(locationText, style: TextStyle(color: mutedTextColor)),
                 ],
               ),
             ),

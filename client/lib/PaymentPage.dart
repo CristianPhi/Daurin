@@ -3,45 +3,113 @@ import 'CheckoutPage.dart';
 import 'ChatPage.dart';
 import 'HistoryPage.dart';
 
+import 'ChatPage.dart';
+import 'CheckoutPage.dart';
+import 'HistoryPage.dart';
+
 class PaymentPage extends StatefulWidget {
   const PaymentPage({
     super.key,
     required this.subtotal,
+    required this.adminFee,
+    required this.shippingFee,
     required this.discount,
     required this.total,
     this.voucherCode,
     this.cartItems = const [],
     this.userAddress = '',
+    this.qrisImageAssetPath = 'assets/images/qris.png',
   });
 
   final int subtotal;
+  final int adminFee;
+  final int shippingFee;
   final int discount;
   final int total;
   final String? voucherCode;
   final List<Map<String, dynamic>> cartItems;
   final String userAddress;
+  final String qrisImageAssetPath;
 
   @override
   State<PaymentPage> createState() => _PaymentPageState();
 }
 
 class _PaymentPageState extends State<PaymentPage> {
-  final TextEditingController _cardNumberController = TextEditingController();
-  final TextEditingController _cardHolderController = TextEditingController();
-  final TextEditingController _expiryController = TextEditingController();
-  final TextEditingController _cvvController = TextEditingController();
-  String _selectedMethod = 'Kartu Kredit/Debit';
+  String _selectedMethod = 'COD';
 
-  @override
-  void dispose() {
-    _cardNumberController.dispose();
-    _cardHolderController.dispose();
-    _expiryController.dispose();
-    _cvvController.dispose();
-    super.dispose();
+  void _openHistoryPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const HistoryPage()));
   }
 
-  bool get _needsCardInfo => _selectedMethod == 'Kartu Kredit/Debit';
+  void _openChatPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+  }
+
+  Future<void> _goToCheckout() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => CheckoutPage(
+          cartItems: widget.cartItems,
+          subtotal: widget.subtotal,
+          adminFee: widget.adminFee,
+          shippingFee: widget.shippingFee,
+          discount: widget.discount,
+          total: widget.total,
+          voucherCode: widget.voucherCode,
+          userAddress: widget.userAddress,
+          paymentMethod: _selectedMethod,
+          qrisImageAssetPath: widget.qrisImageAssetPath,
+          showQris: true,
+        ),
+      ),
+    );
+
+  int get _estimatedDistanceKm {
+    if (widget.userAddress.isEmpty) return 10;
+    final normalizedAddress = widget.userAddress.toLowerCase();
+    final itemLocations = widget.cartItems
+        .map((item) => (item['location']?.toString() ?? '').toLowerCase())
+        .where((loc) => loc.isNotEmpty)
+        .toList();
+
+    if (itemLocations.any((loc) => normalizedAddress.contains(loc))) {
+      return 3;
+    }
+
+    if (itemLocations.any((loc) {
+      final firstPart = loc.split(',').first.trim();
+      return firstPart.isNotEmpty && normalizedAddress.contains(firstPart);
+    })) {
+      return 5;
+    }
+
+    if (normalizedAddress.contains('jakarta') ||
+        itemLocations.any((loc) => loc.contains('jakarta'))) {
+      return 12;
+    }
+
+    return 20;
+  }
+
+  int get _shippingFee {
+    final distanceKm = _estimatedDistanceKm;
+    if (distanceKm <= 5) return 10000;
+    if (distanceKm <= 12) return 15000;
+    if (distanceKm <= 20) return 22000;
+    return 30000;
+  }
+
+  int get _adminFee {
+    final computed = (widget.subtotal * 0.02).round();
+    return computed < 5000 ? 5000 : computed;
+  }
+
+  int get _totalWithFees => widget.total + _shippingFee + _adminFee;
 
   int get _estimatedDistanceKm {
     if (widget.userAddress.isEmpty) return 10;
@@ -96,9 +164,59 @@ class _PaymentPageState extends State<PaymentPage> {
         );
         return;
       }
+    if (result != null && result['confirmed'] == true) {
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
     }
+  }
 
-    Navigator.of(context).pop(true);
+  Widget _buildSummaryRow(String label, int amount, {bool bold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label),
+        Text(
+          amount < 0 ? '-Rp ${amount.abs()}' : 'Rp $amount',
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openHistoryPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const HistoryPage()),
+    );
+  }
+
+  void _openChatPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ChatPage()),
+    );
+  }
+
+  void _goToCheckout() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => CheckoutPage(
+          cartItems: widget.cartItems,
+          subtotal: widget.subtotal,
+          discount: widget.discount,
+          total: _totalWithFees,
+          adminFee: _adminFee,
+          shippingFee: _shippingFee,
+          voucherCode: widget.voucherCode,
+          userAddress: widget.userAddress,
+        ),
+      ),
+    );
+
+    if (result != null && result['confirmed'] == true) {
+      if (!mounted) return;
+      _submitPayment();
+    }
   }
 
   void _openHistoryPage() {
@@ -141,6 +259,7 @@ class _PaymentPageState extends State<PaymentPage> {
       appBar: AppBar(
         title: const Text('Pembayaran'),
         backgroundColor: Colors.green.shade700,
+        foregroundColor: Colors.white,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -165,6 +284,9 @@ class _PaymentPageState extends State<PaymentPage> {
             return Padding(
               padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0 + bottom),
                 child: Column(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
@@ -182,6 +304,10 @@ class _PaymentPageState extends State<PaymentPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildSummaryRow('Subtotal', widget.subtotal),
+                        const SizedBox(height: 8),
+                        _buildSummaryRow('Biaya Admin', widget.adminFee),
+                        const SizedBox(height: 8),
+                        _buildSummaryRow('Biaya Ongkir', widget.shippingFee),
                         const SizedBox(height: 8),
                         _buildSummaryRow('Diskon voucher', -widget.discount),
                         const SizedBox(height: 8),
@@ -207,6 +333,12 @@ class _PaymentPageState extends State<PaymentPage> {
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ],
+                        const Divider(height: 24),
+                        _buildSummaryRow(
+                          'Total bayar',
+                          widget.total,
+                          bold: true,
+                        ),
                       ],
                     ),
                   ),
@@ -223,87 +355,87 @@ class _PaymentPageState extends State<PaymentPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 const Text(
-                  'Pilih Metode Pembayaran',
+                  'Metode Pembayaran',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    'Kartu Kredit/Debit',
-                    'GoPay',
-                    'Transfer Bank',
-                  ].map((method) {
-                    final isSelected = _selectedMethod == method;
-                    return ChoiceChip(
-                      label: Text(method),
-                      selected: isSelected,
-                      onSelected: (_) {
-                        setState(() {
-                          _selectedMethod = method;
-                        });
-                      },
-                    );
-                  }).toList(),
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: ['COD', 'QRIS'].map((method) {
+                        final selected = _selectedMethod == method;
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: ChoiceChip(
+                              label: Text(method),
+                              selected: selected,
+                              onSelected: (_) {
+                                setState(() {
+                                  _selectedMethod = method;
+                                });
+                              },
+                              selectedColor: Colors.green.shade100,
+                              labelStyle: TextStyle(
+                                color: selected
+                                    ? Colors.green.shade800
+                                    : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                if (_needsCardInfo) ...[
-                  TextField(
-                    controller: _cardNumberController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nomor kartu',
+                const SizedBox(height: 16),
+                if (_selectedMethod == 'QRIS')
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.green.shade100),
                     ),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _cardHolderController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama pemegang kartu',
+                    child: const Text(
+                      'QRIS belum ditampilkan di sini. Tekan Lanjut ke Konfirmasi untuk melihat QRIS.',
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _expiryController,
-                          decoration: const InputDecoration(
-                            labelText: 'Exp (MM/YY)',
-                          ),
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _cvvController,
-                          decoration: const InputDecoration(
-                            labelText: 'CVV',
-                          ),
-                          keyboardType: TextInputType.number,
-                          obscureText: true,
-                        ),
-                      ),
-                    ],
-                  ),
-                ] else ...[
+                  )
+                else
                   Text(
-                    'Lanjutkan saldo pembayaran menggunakan $_selectedMethod.',
-                    style: const TextStyle(color: Colors.black54),
+                    'COD dipilih. Kurir akan menerima pembayaran saat barang diterima.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: _goToCheckout,
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green.shade700,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: const Text('Lanjut ke Checkout'),
+                    child: const Text('Lanjut ke Konfirmasi'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _openHistoryPage,
+                    child: const Text('Lihat Riwayat Transaksi'),
                   ),
                 ),
               ],
@@ -311,21 +443,6 @@ class _PaymentPageState extends State<PaymentPage> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSummaryRow(String label, int amount, {bool isBold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label),
-        Text(
-          'Rp $amount',
-          style: TextStyle(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ],
     );
   }
 }

@@ -33,6 +33,14 @@ export class CreateItemDto {
 
   @IsOptional()
   @IsString()
+  sellerName?: string;
+
+  @IsOptional()
+  @IsString()
+  sellerEmail?: string;
+
+  @IsOptional()
+  @IsString()
   imageUrl?: string;
 
   @Type(() => Boolean)
@@ -52,6 +60,12 @@ export class CreateItemDto {
   @IsNumber()
   @Min(0)
   discountedPrice?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  quantity?: number;
 
   @IsOptional()
   @IsString()

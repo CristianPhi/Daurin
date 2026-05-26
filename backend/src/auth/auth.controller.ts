@@ -2,7 +2,7 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { GoogleLoginDto } from './dto/google-login.dto';
+import { VerifyPinDto } from './dto/verify-pin.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -18,8 +18,8 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  @Post('login/google')
-  googleLogin(@Body() googleLoginDto: GoogleLoginDto) {
-    return this.authService.googleLogin(googleLoginDto);
+  @Post('verify-pin')
+  verifyPin(@Body() verifyPinDto: VerifyPinDto) {
+    return this.authService.verifyPin(verifyPinDto);
   }
 }

@@ -4,12 +4,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'HomePage.dart';
 import 'RegisterPage.dart';
+import 'pin_gate.dart';
 
 final GoogleSignIn _googleSignIn = GoogleSignIn();
+final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -24,8 +27,13 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   late final Future<void> _googleSignInInit = _googleSignIn.initialize();
   bool _isLoading = false;
-  bool _isGoogleLoading = false;
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_googleSignInInit);
+  }
 
   Future<void> _showStatusDialog({
     required String title,
@@ -112,6 +120,21 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        final Map<String, dynamic>? data =
+            jsonDecode(response.body) as Map<String, dynamic>?;
+        final user = data?['user'];
+        if (user is Map<String, dynamic>) {
+          final email = user['email']?.toString() ?? '';
+          final username = user['username']?.toString() ?? '';
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('account_username', username);
+          await prefs.setString('account_email', email);
+          if (email.isNotEmpty) {
+            await PinGate.setActiveAccountIdentifier(email);
+          } else if (username.isNotEmpty) {
+            await PinGate.setActiveAccountIdentifier(username);
+          }
+        }
         await _showStatusDialog(
           title: 'Login Berhasil',
           message: 'Selamat datang di Daurin.',
@@ -213,6 +236,8 @@ class _LoginPageState extends State<LoginPage> {
       );
       return;
     }
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
 
     setState(() => _isLoading = true);
     try {
@@ -227,8 +252,18 @@ class _LoginPageState extends State<LoginPage> {
           'password': savedPassword,
         }),
       );
+      await _googleSignInInit;
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
-      if (!mounted) return;
+    if ((savedUsername == null || savedUsername.isEmpty) &&
+        (savedEmail == null || savedEmail.isEmpty)) {
+      await _showStatusDialog(
+        title: 'Quick Login tidak tersedia',
+        message: 'Tidak ada kredensial tersimpan. Silakan login manual.',
+        isSuccess: false,
+      );
+      return;
+    }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await _showStatusDialog(
@@ -275,6 +310,21 @@ class _LoginPageState extends State<LoginPage> {
       if (googleUser == null) {
         return;
       }
+    if (savedPassword.isEmpty) {
+      await _showStatusDialog(
+        title: 'Quick Login tidak tersedia',
+        message: 'Password tidak tersimpan. Simpan password di profil untuk Quick Login.',
+        isSuccess: false,
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final identifier = (savedUsername != null && savedUsername.isNotEmpty)
+          ? savedUsername
+          : savedEmail!;
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
       final googleAuth = await googleUser.authentication;
       final response = await postJsonWithFallback(
@@ -283,15 +333,28 @@ class _LoginPageState extends State<LoginPage> {
           'email': googleUser.email,
           'displayName': googleUser.displayName ?? googleUser.email.split('@').first,
           'idToken': googleAuth.idToken,
+        path: '/auth/login',
+        body: jsonEncode({
+          'identifier': identifier,
+          'password': savedPassword,
         }),
       );
 
       if (!mounted) return;
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'account_username',
+          googleUser.displayName ?? googleUser.email.split('@').first,
+        );
+        await prefs.setString('account_email', googleUser.email);
+        await PinGate.setActiveAccountIdentifier(googleUser.email);
         await _showStatusDialog(
           title: 'Login Google Berhasil',
           message: 'Selamat datang, ${googleUser.displayName ?? googleUser.email}.',
+          title: 'Quick Login Berhasil',
+          message: 'Login otomatis berhasil.',
           isSuccess: true,
         );
         if (!mounted) return;
@@ -319,10 +382,13 @@ class _LoginPageState extends State<LoginPage> {
         title: 'Timeout',
         message:
             'Request timeout. ${apiConnectionHint()} Pastikan backend hidup di port 3000.',
+        title: 'Quick Login Gagal',
+        message: message is String
+            ? message
+            : 'Login gagal. Cek kredensial tersimpan.',
         isSuccess: false,
       );
-    } catch (error) {
-      if (!mounted) return;
+    } catch (e) {
       await _showStatusDialog(
         title: 'Koneksi Gagal',
         message:
@@ -335,6 +401,12 @@ class _LoginPageState extends State<LoginPage> {
           _isGoogleLoading = false;
         });
       }
+        title: 'Quick Login Error',
+        message: 'Terjadi kesalahan: ${e.toString()}',
+        isSuccess: false,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -440,6 +512,10 @@ class _LoginPageState extends State<LoginPage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Text('Masuk dengan Google'),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _isLoading ? null : _quickLogin,
+                child: const Text('Quick Login (pakai kredensial tersimpan)'),
               ),
               const SizedBox(height: 24),
               TextButton(
@@ -451,14 +527,178 @@ class _LoginPageState extends State<LoginPage> {
                         initialEmail: _identifierController.text.contains('@')
                             ? _identifierController.text
                             : '',
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Email / Username:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                  );
-                },
-                child: const Text('Do not have account? Register here'),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _identifierController,
+                        decoration: InputDecoration(
+                          hintText: 'Masukkan email / username kamu',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          prefixIcon: const Icon(Icons.person_outline),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Email atau username wajib diisi';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Password:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          hintText: 'Masukkan password',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Password wajib diisi';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 30),
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _login,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Login ke Daurin'),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Expanded(child: Divider()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'atau',
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          const Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: _isGoogleLoading ? null : _loginWithGoogle,
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          child: _isGoogleLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CustomPaint(
+                                        painter: _GoogleLogoPainter(),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Lanjutkan dengan Google',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => RegisterPage(
+                                initialEmail:
+                                    _identifierController.text.contains('@')
+                                    ? _identifierController.text
+                                    : '',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Do not have account? Register here'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
