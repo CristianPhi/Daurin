@@ -116,9 +116,11 @@ class _PaymentPageState extends State<PaymentPage> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
+          child: Builder(builder: (ctx) {
+            final bottom = MediaQuery.of(ctx).viewInsets.bottom;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0 + bottom),
+                child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
