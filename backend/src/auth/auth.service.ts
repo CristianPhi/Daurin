@@ -11,6 +11,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { User, UserDocument } from './schemas/user.schema';
 
 @Injectable()
@@ -98,6 +99,74 @@ export class AuthService {
     } catch (error) {
       throw this.mapDbError(error);
     }
+  }
+
+  async googleLogin(googleLoginDto: GoogleLoginDto) {
+    try {
+      const email = googleLoginDto.email.trim().toLowerCase();
+      if (!email) {
+        throw new BadRequestException('Email diperlukan untuk Google login');
+      }
+
+      const normalizedDisplayName = googleLoginDto.displayName
+        ?.trim()
+        .toLowerCase();
+
+      let user = await this.userModel.findOne({ email }).exec();
+      if (user) {
+        return {
+          message: 'Login Google berhasil',
+          user: {
+            id: user._id,
+            username: user.username,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+          },
+        };
+      }
+
+      const username = await this.generateUniqueUsername(
+        normalizedDisplayName?.replace(/\s+/g, '') ||
+          email.split('@')[0],
+      );
+      const randomPassword = Math.random().toString(36).slice(2, 12);
+
+      user = await this.userModel.create({
+        username,
+        email,
+        phoneNumber: '',
+        password: randomPassword,
+      });
+
+      return {
+        message: 'Login Google berhasil',
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+        },
+      };
+    } catch (error) {
+      throw this.mapDbError(error);
+    }
+  }
+
+  private async generateUniqueUsername(base: string) {
+    const sanitizedBase = base
+      .replace(/[^a-z0-9]/g, '')
+      .trim()
+      .toLowerCase();
+    let candidate = sanitizedBase.length > 0 ? sanitizedBase : `user${Date.now()}`;
+    let suffix = '';
+
+    while (
+      await this.userModel.exists({ username: `${candidate}${suffix}` })
+    ) {
+      suffix = Math.floor(Math.random() * 9000 + 1000).toString();
+    }
+
+    return `${candidate}${suffix}`;
   }
 
   private mapDbError(error: unknown) {

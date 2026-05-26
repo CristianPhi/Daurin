@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'LoginPage.dart';
 import 'api_client.dart';
 import 'AccountPage.dart';
+import 'PaymentPage.dart';
 
 const List<String> _standardLocations = [
   'Jabodetabek',
@@ -45,6 +46,36 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   // Cart
   final List<_CartItem> _cart = [];
+
+  // Voucher and payment
+  final List<Voucher> _vouchers = [
+    Voucher(
+      id: 'VCHR10',
+      title: 'Diskon 10%',
+      description: 'Potongan harga untuk belanja kamu.',
+      discountPercent: 10,
+      expiresOn: '30 Juni 2026',
+      minCartValue: 100000,
+    ),
+    Voucher(
+      id: 'VCHR20',
+      title: 'Diskon 20%',
+      description: 'Cocok untuk belanja lebih hemat.',
+      discountPercent: 20,
+      expiresOn: '15 Juli 2026',
+      minCartValue: 200000,
+    ),
+    Voucher(
+      id: 'VCHR30REC',
+      title: 'Diskon 30% Recycle',
+      description: 'Lebih hemat untuk item kategori recycle.',
+      discountPercent: 30,
+      expiresOn: '31 Juli 2026',
+      requiredCategory: 'Recycle',
+    ),
+  ];
+  String? _appliedVoucherCode;
+  int? _appliedVoucherDiscountPercent;
 
   // Account page controllers
   final TextEditingController _accountAddressController =
@@ -202,8 +233,9 @@ class _HomePageState extends State<HomePage> {
                 _accountAddressController.text.trim(),
               );
               if (passwordController.text.trim().isNotEmpty) {
-                _accountPasswordController.text = passwordController.text
-                    .trim();
+                final pwd = passwordController.text.trim();
+                _accountPasswordController.text = pwd;
+                await prefs.setString('account_password', pwd);
               }
               if (!mounted) return;
               navigator.pop();
@@ -233,6 +265,135 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  Voucher? get _recommendedVoucher {
+    if (_cart.isEmpty) return null;
+    final eligible = _vouchers.where((voucher) {
+      return _isVoucherEligible(voucher);
+    }).toList();
+    if (eligible.isEmpty) return null;
+    eligible.sort((a, b) => b.discountPercent.compareTo(a.discountPercent));
+    return eligible.first;
+  }
+
+  bool _isVoucherEligible(Voucher voucher) {
+    if (voucher.isUsed) return false;
+    if (_cart.isEmpty) return false;
+    if (voucher.minCartValue != null && _cartTotal < voucher.minCartValue!) {
+      return false;
+    }
+    if (voucher.requiredCategory != null) {
+      return _cart.any((ci) => ci.item.category == voucher.requiredCategory);
+    }
+    return true;
+  }
+
+  void _clearVoucher() {
+    setState(() {
+      _appliedVoucherCode = null;
+      _appliedVoucherDiscountPercent = null;
+    });
+  }
+
+  // Total harga setelah menerapkan diskon penjual (per-item discountedPrice jika ada)
+  int get _priceAfterSellerTotal {
+    return _cart.fold(
+        0,
+        (sum, c) =>
+            sum + ((c.item.discountedPrice ?? c.item.price) * c.quantity));
+  }
+
+  int get _discountAmount {
+    if (_appliedVoucherDiscountPercent == null || _cart.isEmpty) {
+      return 0;
+    }
+
+    // Voucher applies on top of seller-discounted prices (stacking).
+    final afterSeller = _priceAfterSellerTotal;
+    return ((afterSeller * _appliedVoucherDiscountPercent!) / 100).round();
+  }
+
+  int get _finalCartTotal {
+    // Subtotal (original prices) minus seller discounts minus voucher discount
+    final sellerDiscount = _cartTotal - _priceAfterSellerTotal;
+    return _cartTotal - sellerDiscount - _discountAmount;
+  }
+
+  void _applyVoucher(String voucherId) {
+    final voucherIndex = _vouchers.indexWhere((v) => v.id == voucherId);
+    if (voucherIndex < 0) {
+      _showMessage('Voucher tidak ditemukan.');
+      return;
+    }
+
+    final voucher = _vouchers[voucherIndex];
+    if (_cart.isEmpty) {
+      _showMessage('Tambahkan item ke keranjang dulu untuk pakai voucher.');
+      return;
+    }
+    if (voucher.isUsed) {
+      _showMessage('Voucher sudah digunakan.');
+      return;
+    }
+    if (!_isVoucherEligible(voucher)) {
+      final conditions = <String>[];
+      if (voucher.minCartValue != null) {
+        conditions.add('belanja minimal Rp ${voucher.minCartValue}');
+      }
+      if (voucher.requiredCategory != null) {
+        conditions.add('kategori ${voucher.requiredCategory}');
+      }
+      _showMessage(
+          'Voucher tidak memenuhi syarat: ${conditions.join(' dan ')}.');
+      return;
+    }
+
+    setState(() {
+      _vouchers[voucherIndex] = voucher.copyWith(isUsed: true);
+      _appliedVoucherCode = voucher.id;
+      _appliedVoucherDiscountPercent = voucher.discountPercent;
+    });
+    _showMessage('Voucher ${voucher.id} berhasil diterapkan.');
+  }
+
+  Future<void> _navigateToPaymentPage() async {
+    if (_cart.isEmpty) {
+      _showMessage('Keranjang kosong, tambahkan item terlebih dahulu.');
+      return;
+    }
+
+    // Buat list item untuk checkout
+    final List<Map<String, dynamic>> cartItems = _cart
+        .map((cartItem) => {
+              'name': cartItem.item.name,
+              'quantity': cartItem.quantity,
+              'price': cartItem.item.price,
+              'location': cartItem.item.location,
+              'subtotal': cartItem.item.price * cartItem.quantity,
+            })
+        .toList();
+
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PaymentPage(
+          subtotal: _cartTotal,
+          discount: _discountAmount,
+          total: _finalCartTotal,
+          voucherCode: _appliedVoucherCode,
+          cartItems: cartItems,
+          userAddress: _accountAddressController.text,
+        ),
+      ),
+    );
+
+    if (paid == true) {
+      setState(() {
+        _cart.clear();
+        _clearVoucher();
+      });
+      _showMessage('Pembayaran berhasil. Terima kasih!');
+    }
   }
 
   String _formatLocationLabel(Placemark placemark) {
@@ -818,15 +979,71 @@ class _HomePageState extends State<HomePage> {
             },
             onAboutUs: _showAboutUsDialog,
             onFaq: _showFaqDialog,
+            vouchers: _vouchers,
+            recommendedVoucher: _recommendedVoucher,
+            selectedVoucherCode: _appliedVoucherCode,
+            onUseVoucher: _applyVoucher,
           ),
         ),
       ),
     ];
+    final pageTheme = _darkMode
+        ? ThemeData.dark(useMaterial3: true).copyWith(
+            scaffoldBackgroundColor: const Color(0xFF121212),
+            cardColor: const Color(0xFF1E1E1E),
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green.shade700,
+                side: BorderSide(color: Colors.green.shade700),
+              ),
+            ),
+            textTheme: ThemeData.dark(useMaterial3: true)
+                .textTheme
+                .apply(
+                  bodyColor: Colors.white,
+                  displayColor: Colors.white,
+                ),
+          )
+        : ThemeData.light(useMaterial3: true).copyWith(
+            scaffoldBackgroundColor: const Color(0xFFF6F8F3),
+            cardColor: Colors.white,
+            appBarTheme: AppBarTheme(
+              backgroundColor: Colors.green.shade700,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.green.shade700,
+                side: BorderSide(color: Colors.green.shade700),
+              ),
+            ),
+          );
+
     final titles = ['Daurin', 'Promo', 'Keranjang', 'Akun'];
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8F3),
-      appBar: AppBar(
+    return Theme(
+      data: pageTheme,
+      child: Scaffold(
+        backgroundColor: pageTheme.scaffoldBackgroundColor,
+        appBar: AppBar(
         title: Text(titles[_selectedIndex]),
         centerTitle: false,
         backgroundColor: Colors.green.shade700,
@@ -913,49 +1130,189 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
+
     return Column(
       children: [
+        Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ringkasan Keranjang',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Subtotal'),
+                    Text('Rp $_cartTotal'),
+                  ],
+                ),
+                if (_discountAmount > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Diskon voucher'),
+                      Text('- Rp $_discountAmount'),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total Bayar',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Rp $_finalCartTotal',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_recommendedVoucher != null && _appliedVoucherCode == null) ...[
+          Card(
+            color: Colors.green.shade50,
+            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Voucher terbaik untuk keranjang Anda',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(_recommendedVoucher!.title),
+                  const SizedBox(height: 4),
+                  Text(_recommendedVoucher!.description),
+                  if (_recommendedVoucher!.minCartValue != null)
+                    Text(
+                      'Syarat: minimal belanja Rp ${_recommendedVoucher!.minCartValue}',
+                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                    ),
+                  if (_recommendedVoucher!.requiredCategory != null)
+                    Text(
+                      'Kategori: ${_recommendedVoucher!.requiredCategory}',
+                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => _applyVoucher(_recommendedVoucher!.id),
+                      child: const Text('Gunakan voucher ini'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         Expanded(
           child: ListView.separated(
             itemCount: _cart.length,
-            separatorBuilder: (_, _) => const Divider(),
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             itemBuilder: (context, idx) {
               final ci = _cart[idx];
-              return ListTile(
-                leading: ci.item.imageUrl != null
-                    ? Image.network(
-                        buildApiUrl(ci.item.imageUrl!),
-                        width: 56,
-                        height: 56,
-                        fit: BoxFit.cover,
-                      )
-                    : const SizedBox(width: 56, height: 56),
-                title: Text(ci.item.name),
-                subtitle: Text('Rp ${ci.item.price} x ${ci.quantity}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: () {
-                        if (ci.quantity > 1) {
-                          setState(() {
-                            _cart[idx] = ci.copyWith(quantity: ci.quantity - 1);
-                          });
-                        } else {
-                          _removeFromCart(ci.item.id);
-                        }
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: () {
-                        setState(() {
-                          _cart[idx] = ci.copyWith(quantity: ci.quantity + 1);
-                        });
-                      },
-                    ),
-                  ],
+              return Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      if (ci.item.imageUrl != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            buildApiUrl(ci.item.imageUrl!),
+                            width: 70,
+                            height: 70,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      else
+                        Container(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.image_not_supported),
+                        ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              ci.item.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text('Rp ${ci.item.price} x ${ci.quantity}'),
+                            if (ci.item.discountPercent != null && ci.item.discountPercent! > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '${ci.item.discountPercent}% OFF',
+                                  style: TextStyle(
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () {
+                              if (ci.quantity > 1) {
+                                setState(() {
+                                  _cart[idx] = ci.copyWith(quantity: ci.quantity - 1);
+                                });
+                              } else {
+                                _removeFromCart(ci.item.id);
+                              }
+                            },
+                          ),
+                          Text('${ci.quantity}'),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              setState(() {
+                                _cart[idx] = ci.copyWith(quantity: ci.quantity + 1);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -966,15 +1323,24 @@ class _HomePageState extends State<HomePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Total: Rp $_cartTotal',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+              ElevatedButton.icon(
+                onPressed: _navigateToPaymentPage,
+                icon: const Icon(Icons.payment),
+                label: const Text('Bayar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade700,
+                ),
               ),
-              ElevatedButton(
+              FilledButton(
                 onPressed: () {
-                  _showMessage('Checkout belum diimplementasikan');
+                  setState(() {
+                    _cart.clear();
+                    _appliedVoucherCode = null;
+                    _appliedVoucherDiscountPercent = null;
+                  });
+                  _showMessage('Keranjang dikosongkan.');
                 },
-                child: const Text('Checkout'),
+                child: const Text('Kosongkan'),
               ),
             ],
           ),
@@ -1246,17 +1612,55 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.black12),
       ),
-      child: GridView.builder(
-        itemCount: promoItems.length,
-        padding: const EdgeInsets.only(bottom: 90),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          mainAxisExtent: 310,
-        ),
-        itemBuilder: (context, index) =>
-            _ItemCard(item: promoItems[index], onAddToCart: _addToCart),
+      child: Column(
+        children: [
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_offer, color: Colors.green, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          'Diskon & Promo',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          'Lihat penawaran khusus dan item diskon yang dapat kamu tambahkan ke keranjang.',
+                          style: TextStyle(color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: GridView.builder(
+              itemCount: promoItems.length,
+              padding: const EdgeInsets.only(bottom: 90),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: 310,
+              ),
+              itemBuilder: (context, index) =>
+                  _ItemCard(item: promoItems[index], onAddToCart: _addToCart),
+            ),
+          ),
+        ],
       ),
     );
   }

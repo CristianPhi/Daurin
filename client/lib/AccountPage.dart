@@ -1,5 +1,40 @@
 import 'package:flutter/material.dart';
 
+class Voucher {
+  Voucher({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.discountPercent,
+    required this.expiresOn,
+    this.minCartValue,
+    this.requiredCategory,
+    this.isUsed = false,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final int discountPercent;
+  final String expiresOn;
+  final int? minCartValue;
+  final String? requiredCategory;
+  final bool isUsed;
+
+  Voucher copyWith({bool? isUsed}) {
+    return Voucher(
+      id: id,
+      title: title,
+      description: description,
+      discountPercent: discountPercent,
+      expiresOn: expiresOn,
+      minCartValue: minCartValue,
+      requiredCategory: requiredCategory,
+      isUsed: isUsed ?? this.isUsed,
+    );
+  }
+}
+
 class AccountPage extends StatelessWidget {
   const AccountPage({
     Key? key,
@@ -15,6 +50,10 @@ class AccountPage extends StatelessWidget {
     required this.onChangePassword,
     required this.onAboutUs,
     required this.onFaq,
+    required this.vouchers,
+    required this.recommendedVoucher,
+    required this.onUseVoucher,
+    this.selectedVoucherCode,
   }) : super(key: key);
 
   final String username;
@@ -29,6 +68,10 @@ class AccountPage extends StatelessWidget {
   final VoidCallback onChangePassword;
   final VoidCallback onAboutUs;
   final VoidCallback onFaq;
+  final List<Voucher> vouchers;
+  final Voucher? recommendedVoucher;
+  final ValueChanged<String> onUseVoucher;
+  final String? selectedVoucherCode;
 
   void _showAccountMenu(BuildContext context) {
     showModalBottomSheet<void>(
@@ -124,16 +167,114 @@ class AccountPage extends StatelessWidget {
     );
   }
 
+  Widget _buildVoucherCard(BuildContext context, Voucher voucher) {
+    final theme = Theme.of(context);
+    final mutedText = theme.colorScheme.onSurface.withOpacity(0.7);
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    voucher.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: voucher.isUsed
+                        ? theme.colorScheme.surfaceVariant
+                        : theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    voucher.isUsed ? 'Digunakan' : 'Aktif',
+                    style: TextStyle(
+                      color: voucher.isUsed
+                          ? theme.colorScheme.onSurface.withOpacity(0.6)
+                          : theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(voucher.description),
+            const SizedBox(height: 10),
+            if (voucher.minCartValue != null || voucher.requiredCategory != null) ...[
+              if (voucher.minCartValue != null)
+                Text(
+                  'Syarat: minimal belanja Rp ${voucher.minCartValue}',
+                  style: TextStyle(color: mutedText, fontSize: 12),
+                ),
+              if (voucher.requiredCategory != null)
+                Text(
+                  'Berlaku untuk kategori: ${voucher.requiredCategory}',
+                  style: TextStyle(color: mutedText, fontSize: 12),
+                ),
+              const SizedBox(height: 8),
+            ],
+            Row(
+              children: [
+                Chip(
+                  label: Text('${voucher.discountPercent}%'),
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                ),
+                const SizedBox(width: 10),
+                Text('Expires ${voucher.expiresOn}'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: voucher.isUsed ? null : () => onUseVoucher(voucher.id),
+                style: FilledButton.styleFrom(
+                  backgroundColor: voucher.isUsed
+                      ? theme.colorScheme.onSurface.withOpacity(0.12)
+                      : theme.colorScheme.primary,
+                  foregroundColor: voucher.isUsed
+                      ? theme.colorScheme.onSurface.withOpacity(0.38)
+                      : theme.colorScheme.onPrimary,
+                ),
+                child: Text(voucher.isUsed ? 'Sudah digunakan' : 'Gunakan Voucher'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final mutedText = theme.colorScheme.onSurface.withOpacity(0.7);
+    final surfaceVariant = theme.colorScheme.surfaceVariant;
+
     return SingleChildScrollView(
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.black12),
+          border: Border.all(color: theme.colorScheme.outline.withOpacity(0.12)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,11 +282,11 @@ class AccountPage extends StatelessWidget {
             Center(
               child: CircleAvatar(
                 radius: 36,
-                backgroundColor: Colors.green.shade100,
+                backgroundColor: theme.colorScheme.primaryContainer,
                 child: Text(
                   username.isNotEmpty ? username[0].toUpperCase() : 'U',
                   style: TextStyle(
-                    color: Colors.green.shade800,
+                    color: theme.colorScheme.primary,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
@@ -164,23 +305,26 @@ class AccountPage extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Center(
-              child: Text(email, style: const TextStyle(color: Colors.black54)),
+              child: Text(
+                email,
+                style: TextStyle(color: mutedText),
+              ),
             ),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
+                color: theme.colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.green.shade100),
+                border: Border.all(color: theme.colorScheme.primary.withOpacity(0.24)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.my_location, color: Colors.green.shade700),
+                      Icon(Icons.my_location, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       const Text(
                         'Location',
@@ -190,7 +334,7 @@ class AccountPage extends StatelessWidget {
                       Text(
                         locationStatus,
                         style: TextStyle(
-                          color: Colors.green.shade800,
+                          color: theme.colorScheme.primary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -199,11 +343,148 @@ class AccountPage extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     locationText,
-                    style: const TextStyle(color: Colors.black54),
+                    style: TextStyle(color: mutedText),
                   ),
                 ],
               ),
             ),
+            const SizedBox(height: 18),
+            Text(
+              'Voucher Saya',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (selectedVoucherCode != null)
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: theme.colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Voucher aktif: $selectedVoucherCode',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (vouchers.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: surfaceVariant,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'Tidak ada voucher tersedia saat ini.',
+                  style: TextStyle(color: mutedText),
+                ),
+              )
+            else
+              Column(
+                children: vouchers.map((voucher) => _buildVoucherCard(context, voucher)).toList(),
+              ),
+            const SizedBox(height: 18),
+            if (recommendedVoucher != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: theme.colorScheme.primary.withOpacity(0.24)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.star, color: theme.colorScheme.primary),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Voucher rekomendasi untuk keranjang Anda',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildVoucherCard(context, recommendedVoucher!),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+            Text(
+              'Voucher Saya',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (selectedVoucherCode != null)
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: theme.colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Voucher aktif: $selectedVoucherCode',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (vouchers.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: surfaceVariant,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'Tidak ada voucher tersedia saat ini.',
+                  style: TextStyle(color: mutedText),
+                ),
+              )
+            else
+              Column(
+                children: vouchers.map((voucher) => _buildVoucherCard(context, voucher)).toList(),
+              ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,

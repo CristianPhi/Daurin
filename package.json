@@ -1,0 +1,9 @@
+{
+  "name": "daurin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd backend && npm ci && npm run build",
+    "start": "cd backend && npm run start:prod"
+  }
+}
