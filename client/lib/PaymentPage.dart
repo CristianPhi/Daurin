@@ -11,6 +11,8 @@ class PaymentPage extends StatefulWidget {
   const PaymentPage({
     super.key,
     required this.subtotal,
+    required this.adminFee,
+    required this.shippingFee,
     required this.discount,
     required this.total,
     this.voucherCode,
@@ -20,6 +22,8 @@ class PaymentPage extends StatefulWidget {
   });
 
   final int subtotal;
+  final int adminFee;
+  final int shippingFee;
   final int discount;
   final int total;
   final String? voucherCode;
@@ -52,6 +56,8 @@ class _PaymentPageState extends State<PaymentPage> {
         builder: (_) => CheckoutPage(
           cartItems: widget.cartItems,
           subtotal: widget.subtotal,
+          adminFee: widget.adminFee,
+          shippingFee: widget.shippingFee,
           discount: widget.discount,
           total: widget.total,
           voucherCode: widget.voucherCode,
@@ -223,6 +229,10 @@ class _PaymentPageState extends State<PaymentPage> {
                       children: [
                         _buildSummaryRow('Subtotal', widget.subtotal),
                         const SizedBox(height: 8),
+                        _buildSummaryRow('Biaya Admin', widget.adminFee),
+                        const SizedBox(height: 8),
+                        _buildSummaryRow('Biaya Ongkir', widget.shippingFee),
+                        const SizedBox(height: 8),
                         _buildSummaryRow('Diskon voucher', -widget.discount),
                         const SizedBox(height: 8),
                         _buildSummaryRow('Biaya admin', _adminFee),
@@ -299,7 +309,7 @@ class _PaymentPageState extends State<PaymentPage> {
                               labelStyle: TextStyle(
                                 color: selected
                                     ? Colors.green.shade800
-                                    : Colors.black87,
+                                    : Theme.of(context).colorScheme.onSurface,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -325,9 +335,11 @@ class _PaymentPageState extends State<PaymentPage> {
                     ),
                   )
                 else
-                  const Text(
+                  Text(
                     'COD dipilih. Kurir akan menerima pembayaran saat barang diterima.',
-                    style: TextStyle(color: Colors.black54),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 const SizedBox(height: 20),
                 SizedBox(

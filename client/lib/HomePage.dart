@@ -420,12 +420,25 @@ class _HomePageState extends State<HomePage> {
         )
         .toList();
 
+    // Calculate admin fee (1500 per transaction)
+    const int adminFee = 1500;
+
+    // Calculate shipping fee (5000 per transaction as base, could be based on distance later)
+    // For now: 5000 base + 1000 per item for simplicity
+    final int shippingFee = 5000 + (_cart.length * 1000);
+
+    // Update total: subtotal + adminFee + shippingFee - discount
+    final int finalTotal =
+        _cartTotal + adminFee + shippingFee - _discountAmount;
+
     final paid = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => PaymentPage(
           subtotal: _cartTotal,
+          adminFee: adminFee,
+          shippingFee: shippingFee,
           discount: _discountAmount,
-          total: _finalCartTotal,
+          total: finalTotal,
           voucherCode: _appliedVoucherCode,
           cartItems: cartItems,
           userAddress: _accountAddressController.text,
@@ -599,9 +612,12 @@ class _HomePageState extends State<HomePage> {
     }
 
     final hasSellerData =
-        sellerName != null && sellerName.isNotEmpty && sellerEmail != null && sellerEmail.isNotEmpty;
+        sellerName != null &&
+        sellerName.isNotEmpty &&
+        sellerEmail != null &&
+        sellerEmail.isNotEmpty;
     final threadId = hasSellerData
-      ? '${item.id.trim().toLowerCase()}__${sellerEmail.toLowerCase()}__${buyerEmail.toLowerCase()}'
+        ? '${item.id.trim().toLowerCase()}__${sellerEmail.toLowerCase()}__${buyerEmail.toLowerCase()}'
         : 'draft__${item.id.trim().toLowerCase()}__${buyerEmail.toLowerCase()}';
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -864,7 +880,9 @@ class _HomePageState extends State<HomePage> {
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.black12),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -898,7 +916,11 @@ class _HomePageState extends State<HomePage> {
                               selectedPhotoPath == null
                                   ? 'Belum ada foto dipilih'
                                   : 'Foto dipilih',
-                              style: const TextStyle(color: Colors.black54),
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                           TextButton.icon(
@@ -1260,7 +1282,7 @@ class _HomePageState extends State<HomePage> {
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Akun'),
         ],
         selectedItemColor: Colors.green.shade700,
-        unselectedItemColor: Colors.black54,
+        unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
         type: BottomNavigationBarType.fixed,
       ),
     );
@@ -1271,7 +1293,9 @@ class _HomePageState extends State<HomePage> {
       return Center(
         child: Text(
           'Keranjang kosong',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -1348,16 +1372,16 @@ class _HomePageState extends State<HomePage> {
                   if (_recommendedVoucher!.minCartValue != null)
                     Text(
                       'Syarat: minimal belanja Rp ${_recommendedVoucher!.minCartValue}',
-                      style: const TextStyle(
-                        color: Colors.black54,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 12,
                       ),
                     ),
                   if (_recommendedVoucher!.requiredCategory != null)
                     Text(
                       'Kategori: ${_recommendedVoucher!.requiredCategory}',
-                      style: const TextStyle(
-                        color: Colors.black54,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 12,
                       ),
                     ),
@@ -1775,7 +1799,9 @@ class _HomePageState extends State<HomePage> {
       return Center(
         child: Text(
           'Belum ada promo saat ini.',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -1803,18 +1829,20 @@ class _HomePageState extends State<HomePage> {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text(
+                      children: [
+                        const Text(
                           'Diskon & Promo',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 6),
+                        const SizedBox(height: 6),
                         Text(
                           'Lihat penawaran khusus dan item diskon yang dapat kamu tambahkan ke keranjang.',
-                          style: TextStyle(color: Colors.black54),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -1868,7 +1896,9 @@ class _HomePageState extends State<HomePage> {
               ),
               Text(
                 '${visibleItems.length} hasil',
-                style: const TextStyle(color: Colors.black54),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -1886,19 +1916,25 @@ class _HomePageState extends State<HomePage> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: _borderColor),
               ),
-              child: const Column(
+              child: Column(
                 children: [
-                  Icon(Icons.search_off, size: 48, color: Colors.black38),
-                  SizedBox(height: 12),
-                  Text(
+                  Icon(
+                    Icons.search_off,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
                     'Belum ada item yang cocok.',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(height: 6),
+                  const SizedBox(height: 6),
                   Text(
                     'Coba ubah kata kunci atau filter untuk menemukan item lain.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black54),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -2161,7 +2197,9 @@ class _ItemCard extends StatelessWidget {
                             style: TextStyle(
                               color: isSoldOut
                                   ? Colors.grey.shade700
-                                  : Colors.black54,
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -2240,8 +2278,10 @@ class _ItemCard extends StatelessWidget {
                             item.discountedPrice! < item.price) ...[
                           Text(
                             'Rp ${item.price}',
-                            style: const TextStyle(
-                              color: Colors.black54,
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                               fontWeight: FontWeight.w500,
                               decoration: TextDecoration.lineThrough,
                               fontSize: 12,
@@ -2271,8 +2311,10 @@ class _ItemCard extends StatelessWidget {
                           item.location,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.black54,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                             fontSize: 12,
                           ),
                         ),
@@ -2297,8 +2339,10 @@ class _ItemCard extends StatelessWidget {
                             item.description!,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.black54,
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                               fontSize: 12,
                             ),
                           ),

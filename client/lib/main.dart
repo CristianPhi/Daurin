@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'LoginPage.dart';
+import 'HomePage.dart';
 import 'app_theme_controller.dart';
+import 'pin_gate.dart';
+import 'api_client.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,8 +59,45 @@ class _MainState extends State<Main> {
   }
 }
 
-class MyHomePage extends StatelessWidget {
+class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key});
+
+  @override
+  State<MyHomePage> createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkAutoLogin();
+  }
+
+  Future<void> _checkAutoLogin() async {
+    // Give UI time to render first
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    final activeIdentifier = await PinGate.getActiveAccountIdentifier();
+    if (activeIdentifier != null && activeIdentifier.isNotEmpty) {
+      // Cek apakah backend reachable dulu sebelum auto-login
+      try {
+        final resp = await getJsonWithFallback(path: '/');
+        if (resp.statusCode >= 200 && resp.statusCode < 300) {
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomePage()),
+          );
+          return;
+        }
+      } catch (_) {
+        // Jika gagal, jangan auto-navigate — biarkan user ke LoginPage
+        // (nanti di LoginPage / HomePage akan muncul pesan koneksi)
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

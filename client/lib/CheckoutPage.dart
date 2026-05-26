@@ -13,6 +13,8 @@ class CheckoutPage extends StatefulWidget {
     super.key,
     required this.cartItems,
     required this.subtotal,
+    required this.adminFee,
+    required this.shippingFee,
     required this.discount,
     required this.total,
     required this.adminFee,
@@ -28,6 +30,8 @@ class CheckoutPage extends StatefulWidget {
 
   final List<Map<String, dynamic>> cartItems;
   final int subtotal;
+  final int adminFee;
+  final int shippingFee;
   final int discount;
   final int total;
   final int adminFee;
@@ -1131,6 +1135,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       ),
                       const Divider(height: 20),
                       _buildRow('Subtotal', widget.subtotal),
+                      _buildRow('Biaya Admin', widget.adminFee),
+                      _buildRow('Biaya Ongkir', widget.shippingFee),
                       _buildRow('Diskon Voucher', -widget.discount),
                       if (widget.voucherCode != null) ...[
                         const SizedBox(height: 8),
