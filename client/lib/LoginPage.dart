@@ -2,10 +2,15 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'HomePage.dart';
 import 'RegisterPage.dart';
+import 'pin_gate.dart';
+
+final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,8 +23,15 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final Future<void> _googleSignInInit = _googleSignIn.initialize();
   bool _isLoading = false;
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_googleSignInInit);
+  }
 
   Future<void> _showStatusDialog({
     required String title,
@@ -100,6 +112,21 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        final Map<String, dynamic>? data =
+            jsonDecode(response.body) as Map<String, dynamic>?;
+        final user = data?['user'];
+        if (user is Map<String, dynamic>) {
+          final email = user['email']?.toString() ?? '';
+          final username = user['username']?.toString() ?? '';
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('account_username', username);
+          await prefs.setString('account_email', email);
+          if (email.isNotEmpty) {
+            await PinGate.setActiveAccountIdentifier(email);
+          } else if (username.isNotEmpty) {
+            await PinGate.setActiveAccountIdentifier(username);
+          }
+        }
         await _showStatusDialog(
           title: 'Login Berhasil',
           message: 'Selamat datang di Daurin.',
@@ -182,6 +209,12 @@ class _LoginPageState extends State<LoginPage> {
     final savedUsername = prefs.getString('account_username')?.trim();
     final savedEmail = prefs.getString('account_email')?.trim();
     final savedPassword = prefs.getString('account_password') ?? '';
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+
+    try {
+      await _googleSignInInit;
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
     if ((savedUsername == null || savedUsername.isEmpty) &&
         (savedEmail == null || savedEmail.isEmpty)) {
@@ -207,6 +240,7 @@ class _LoginPageState extends State<LoginPage> {
       final identifier = (savedUsername != null && savedUsername.isNotEmpty)
           ? savedUsername
           : savedEmail!;
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
       final response = await postJsonWithFallback(
         path: '/auth/login',
@@ -219,6 +253,13 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'account_username',
+          googleUser.displayName ?? googleUser.email.split('@').first,
+        );
+        await prefs.setString('account_email', googleUser.email);
+        await PinGate.setActiveAccountIdentifier(googleUser.email);
         await _showStatusDialog(
           title: 'Quick Login Berhasil',
           message: 'Login otomatis berhasil.',
@@ -356,14 +397,176 @@ class _LoginPageState extends State<LoginPage> {
                         initialEmail: _identifierController.text.contains('@')
                             ? _identifierController.text
                             : '',
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Email / Username:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
-                    ),
-                  );
-                },
-                child: const Text('Do not have account? Register here'),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _identifierController,
+                        decoration: InputDecoration(
+                          hintText: 'Masukkan email / username kamu',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          prefixIcon: const Icon(Icons.person_outline),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Email atau username wajib diisi';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Password:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          hintText: 'Masukkan password',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Password wajib diisi';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 30),
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _login,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Login ke Daurin'),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Expanded(child: Divider()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'atau',
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          const Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: _isGoogleLoading ? null : _loginWithGoogle,
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          child: _isGoogleLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CustomPaint(
+                                        painter: _GoogleLogoPainter(),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Text(
+                                      'Lanjutkan dengan Google',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => RegisterPage(
+                                initialEmail:
+                                    _identifierController.text.contains('@')
+                                    ? _identifierController.text
+                                    : '',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Do not have account? Register here'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

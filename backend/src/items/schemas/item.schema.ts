@@ -20,6 +20,12 @@ export class Item {
   @Prop({ required: false, trim: true })
   description?: string;
 
+  @Prop({ required: false, trim: true })
+  sellerName?: string;
+
+  @Prop({ required: false, trim: true, lowercase: true })
+  sellerEmail?: string;
+
   @Prop()
   imageUrl?: string;
 
@@ -31,6 +37,9 @@ export class Item {
 
   @Prop({ min: 0 })
   discountedPrice?: number;
+
+  @Prop({ default: 1, min: 0 })
+  quantity!: number;
 
   @Prop()
   promoNote?: string;
