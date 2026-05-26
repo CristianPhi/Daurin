@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'HomePage.dart';
 import 'RegisterPage.dart';
+
+final GoogleSignIn _googleSignIn = GoogleSignIn();
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,7 +22,9 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
+  late final Future<void> _googleSignInInit = _googleSignIn.initialize();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscurePassword = true;
 
   Future<void> _showStatusDialog({
@@ -68,6 +74,12 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_googleSignInInit);
   }
 
   @override
@@ -254,6 +266,78 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+
+    try {
+      await _googleSignInInit;
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        return;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final response = await postJsonWithFallback(
+        path: '/auth/login/google',
+        body: jsonEncode({
+          'email': googleUser.email,
+          'displayName': googleUser.displayName ?? googleUser.email.split('@').first,
+          'idToken': googleAuth.idToken,
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        await _showStatusDialog(
+          title: 'Login Google Berhasil',
+          message: 'Selamat datang, ${googleUser.displayName ?? googleUser.email}.',
+          isSuccess: true,
+        );
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+        return;
+      }
+
+      final Map<String, dynamic>? data =
+          jsonDecode(response.body) as Map<String, dynamic>?;
+      final message = data?['message'];
+
+      await _showStatusDialog(
+        title: 'Login Google Gagal',
+        message: message is String
+            ? message
+            : 'Login Google gagal. Coba lagi.',
+        isSuccess: false,
+      );
+    } on TimeoutException {
+      if (!mounted) return;
+      await _showStatusDialog(
+        title: 'Timeout',
+        message:
+            'Request timeout. ${apiConnectionHint()} Pastikan backend hidup di port 3000.',
+        isSuccess: false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      await _showStatusDialog(
+        title: 'Koneksi Gagal',
+        message:
+            'Tidak bisa terhubung ke server. ${error.toString()}. ${apiConnectionHint()}',
+        isSuccess: false,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGoogleLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -345,6 +429,17 @@ class _LoginPageState extends State<LoginPage> {
               FilledButton(
                 onPressed: _isLoading ? null : _quickLogin,
                 child: const Text('Quick Login (pakai kredensial tersimpan)'),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _isLoading || _isGoogleLoading ? null : _loginWithGoogle,
+                child: _isGoogleLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Masuk dengan Google'),
               ),
               const SizedBox(height: 24),
               TextButton(
