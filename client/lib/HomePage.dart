@@ -16,9 +16,8 @@ import 'HistoryPage.dart';
 import 'pin_gate.dart';
 import 'app_theme_controller.dart';
 import 'ShippingFee.dart';
-import 'EditProfilePage.dart';
 import 'ChangePasswordPage.dart';
-import 'ManageAddressesPage.dart';
+import 'ManageAddressPage.dart';
 
 const String _brandLogoAsset = 'assets/images/Logo.jpeg';
 
@@ -269,6 +268,22 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _showChangePasswordDialog() async {
+    // Navigate to ChangePasswordPage or show dialog
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChangePasswordPage()));
+  }
+
+  Future<void> _showManageAddressesDialog() async {
+    // Navigate to ManageAddressesPage
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ManageAddressesPage()));
+  }
+
   Future<void> _showAboutUsDialog() async {
     await showDialog<void>(
       context: context,
@@ -298,6 +313,23 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     await action();
+  }
+
+  Future<void> _logout() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+
+      _showMessage('Logout berhasil.');
+    } catch (e) {
+      _showMessage('Error logout: $e');
+    }
   }
 
   Voucher? get _recommendedVoucher {
@@ -1127,38 +1159,19 @@ class _HomePageState extends State<HomePage> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: AccountPage(
-            username: _accountUsernameController.text.isNotEmpty
-                ? _accountUsernameController.text
-                : 'User Baru',
-            email: _accountEmailController.text.isNotEmpty
-                ? _accountEmailController.text
-                : 'Email belum diisi',
+            username: _currentAccountName ?? 'Guest',
+            email: _currentAccountEmail ?? 'No email',
             isDarkMode: _darkMode,
             onToggleDarkMode: _setDarkMode,
-            locationStatus: _locationStatus,
-            locationText: _detectedLocationText,
-            onDetectLocation: () {
-              _runProtectedAction(_detectCurrentLocation);
-            },
-            onLogout: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
-            onEditProfile: () {
-              _runProtectedAction(_showEditProfileDialog);
-            },
-            onChangePassword: () {
-              _runProtectedAction(() async {
-                _showMessage('Fitur ganti password akan datang.');
-              });
-            },
+            onDetectLocation: _detectCurrentLocation,
+            onLogout: () => _runProtectedAction(_logout), // This line
+            onEditProfile: _showEditProfileDialog,
+            onChangePassword: _showChangePasswordDialog,
+            onManageAddresses: _showManageAddressesDialog,
             onAboutUs: _showAboutUsDialog,
             onFaq: _showFaqDialog,
             vouchers: _vouchers,
             recommendedVoucher: _recommendedVoucher,
-            selectedVoucherCode: _appliedVoucherCode,
             onUseVoucher: _applyVoucher,
           ),
         ),

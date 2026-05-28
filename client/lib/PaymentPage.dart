@@ -45,7 +45,6 @@ class _PaymentPageState extends State<PaymentPage> {
     final sellerName = firstItem?['sellerName']?.toString().trim() ?? '';
     final sellerEmail = firstItem?['sellerEmail']?.toString().trim() ?? '';
     final itemId = firstItem?['itemId']?.toString().trim() ?? '';
-    final itemName = firstItem?['name']?.toString().trim() ?? '';
 
     final hasSellerContext =
         buyerEmail.isNotEmpty && sellerEmail.isNotEmpty && itemId.isNotEmpty;
@@ -55,22 +54,22 @@ class _PaymentPageState extends State<PaymentPage> {
     final sellerId = firstItem?['itemId']?.toString().trim() ?? '';
     final sellerUsername = firstItem?['sellerName']?.toString().trim() ?? '';
 
-// ... later in the ChatPage call:
+    // ... later in the ChatPage call:
 
-await Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (_) => ChatPage(
-      threadId: threadId,
-      sellerId: sellerId.isNotEmpty ? sellerId : null,
-      sellerUsername: sellerUsername.isNotEmpty ? sellerUsername : null,
-      sellerName: sellerName.isNotEmpty ? sellerName : null,
-      sellerEmail: sellerEmail.isNotEmpty ? sellerEmail : null,
-      buyerName: buyerName.isNotEmpty ? buyerName : null,
-      buyerEmail: buyerEmail.isNotEmpty ? buyerEmail : null,
-      draftMode: !hasSellerContext,
-    ),
-  ),
-);
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          threadId: threadId,
+          sellerId: sellerId.isNotEmpty ? sellerId : null,
+          sellerUsername: sellerUsername.isNotEmpty ? sellerUsername : null,
+          sellerName: sellerName.isNotEmpty ? sellerName : null,
+          sellerEmail: sellerEmail.isNotEmpty ? sellerEmail : null,
+          buyerName: buyerName.isNotEmpty ? buyerName : null,
+          buyerEmail: buyerEmail.isNotEmpty ? buyerEmail : null,
+          draftMode: !hasSellerContext,
+        ),
+      ),
+    );
   }
 
   Future<void> _goToCheckout(BuildContext context) async {
