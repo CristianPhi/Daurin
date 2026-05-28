@@ -1,9 +1,9 @@
 import { Controller, Post, Patch, Get, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard'; // Adjust path if needed
+import { JwtAuthGuard } from './guards/jwt-auth.guards'; // Adjust path if needed
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { CreateAddressDto } from './dto/create-address.dto';
-import { UpdateAddressDto } from './dto/update-address.dto';
+import { CreateAddressDto } from './dto/create-address-dto';
+import { UpdateAddressDto } from './dto/update-address-dto';
 
 @Controller('auth')
 export class AuthController {
