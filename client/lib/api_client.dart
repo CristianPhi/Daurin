@@ -12,17 +12,29 @@ const Duration requestTimeout = Duration(seconds: 12);
 const Duration uploadTimeout = Duration(seconds: 60);
 
 String apiBaseUrlForDisplay() {
-  return _configuredBaseUrl.isNotEmpty ? _configuredBaseUrl : primaryApiHost();
+  if (_configuredBaseUrl.isNotEmpty) {
+    return _configuredBaseUrl;
+  }
+  return kReleaseMode ? 'API_BASE_URL belum diset' : primaryApiHost();
 }
 
 String apiConnectionHint() {
   final hosts = _candidateHosts();
+  if (kReleaseMode) {
+    return 'API release: ${apiBaseUrlForDisplay()}. Pastikan API_BASE_URL di-set ke HTTPS production backend.';
+  }
   return 'API yang dipakai: ${apiBaseUrlForDisplay()}. Coba host: ${hosts.join(' / ')}. Jika pakai HP fisik via USB, jalankan adb reverse tcp:3000 tcp:3000 atau set API_BASE_URL ke IP laptop.';
 }
 
 String primaryApiHost() {
   if (_configuredBaseUrl.isNotEmpty) {
     return _configuredBaseUrl;
+  }
+
+  if (kReleaseMode) {
+    throw StateError(
+      'API_BASE_URL belum diset. Release build harus memakai backend production HTTPS.',
+    );
   }
 
   if (kIsWeb) {
@@ -39,6 +51,11 @@ String primaryApiHost() {
 String buildApiUrl(String path) {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
+  }
+  if (kReleaseMode && _configuredBaseUrl.isEmpty) {
+    throw StateError(
+      'API_BASE_URL belum diset. Release build harus memakai backend production HTTPS.',
+    );
   }
   if (path.startsWith('/')) {
     return '${_mediaApiHost()}$path';
@@ -132,6 +149,10 @@ List<String> _candidateHosts() {
     return <String>[_configuredBaseUrl];
   }
 
+  if (kReleaseMode) {
+    return <String>[];
+  }
+
   if (kIsWeb) {
     return <String>[_localhostHost];
   }
@@ -151,6 +172,12 @@ List<String> _candidateHosts() {
 String _mediaApiHost() {
   if (_configuredBaseUrl.isNotEmpty) {
     return _configuredBaseUrl;
+  }
+
+  if (kReleaseMode) {
+    throw StateError(
+      'API_BASE_URL belum diset. Release build harus memakai backend production HTTPS.',
+    );
   }
 
   if (kIsWeb) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'api_client.dart';
@@ -79,10 +80,11 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isGoogleLoading = false;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    serverClientId: '842210818086-c05k5hpkj46m8mge2km51ss2irql4c57.apps.googleusercontent.com',
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  late final Future<void> _googleSignInInit = _googleSignIn.initialize(
+    serverClientId:
+        '842210818086-c05k5hpkj46m8mge2km51ss2irql4c57.apps.googleusercontent.com',
   );
-  late final Future<void> _googleSignInInit = _googleSignIn.initialize();
   bool _obscurePassword = true;
 
   @override
@@ -195,6 +197,16 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
+      if (googleAuth.idToken == null || googleAuth.idToken!.isEmpty) {
+        await _showStatusDialog(
+          title: 'Login Google Gagal',
+          message:
+              'idToken kosong. Cek serverClientId Web Client ID, OAuth consent screen, dan pastikan device/emulator punya Google Play Services.',
+          isSuccess: false,
+        );
+        return;
+      }
+
       final response = await postJsonWithFallback(
         path: '/auth/google',
         body: jsonEncode({
@@ -231,8 +243,18 @@ class _LoginPageState extends State<LoginPage> {
             : 'Gagal masuk dengan Google. Coba lagi.',
         isSuccess: false,
       );
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      debugPrint('Google login platform error: ${e.code} ${e.message}');
+      await _showStatusDialog(
+        title: 'Koneksi Gagal',
+        message:
+            'Tidak bisa login dengan Google: ${e.message ?? e.code}. Cek package name, SHA-1, dan Google Play Services.',
+        isSuccess: false,
+      );
     } catch (e) {
       if (!mounted) return;
+      debugPrint('Google login error: $e');
       await _showStatusDialog(
         title: 'Koneksi Gagal',
         message: 'Tidak bisa login dengan Google: ${e.toString()}',
