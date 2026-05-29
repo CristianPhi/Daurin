@@ -120,6 +120,25 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  String _googleSignInErrorMessage(Object error) {
+    final message = error.toString();
+
+    if (message.contains('missingServerClientId') ||
+        message.contains('serverClientId')) {
+      return 'Google Sign In gagal karena serverClientId belum cocok. Pastikan Web Client ID dari Google Cloud dipakai di LoginPage.';
+    }
+
+    if (message.contains('providerConfigurationError')) {
+      return 'Konfigurasi Google Sign In belum cocok dengan SHA-1 atau package name Android.';
+    }
+
+    if (message.contains('canceled') || message.contains('cancelled')) {
+      return 'Login Google dibatalkan.';
+    }
+
+    return 'Tidak bisa login dengan Google: $message';
+  }
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -195,6 +214,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isGoogleLoading = true);
     try {
       await _googleSignInInit;
+      await _googleSignIn.signOut();
       final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
       if (!mounted) return;
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
@@ -265,7 +285,7 @@ class _LoginPageState extends State<LoginPage> {
       debugPrint('Google login error: $e');
       await _showStatusDialog(
         title: 'Koneksi Gagal',
-        message: 'Tidak bisa login dengan Google: ${e.toString()}',
+        message: _googleSignInErrorMessage(e),
         isSuccess: false,
       );
     } finally {

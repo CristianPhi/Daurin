@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ChatPage.dart';
 import 'CheckoutPage.dart';
+import 'chat_thread_id.dart';
 
 class PaymentPage extends StatefulWidget {
   const PaymentPage({
@@ -49,7 +50,11 @@ class _PaymentPageState extends State<PaymentPage> {
     final hasSellerContext =
         buyerEmail.isNotEmpty && sellerEmail.isNotEmpty && itemId.isNotEmpty;
     final threadId = hasSellerContext
-        ? '${itemId.toLowerCase()}__${sellerEmail.toLowerCase()}__${buyerEmail.toLowerCase()}'
+        ? buildChatThreadId(
+            itemId: itemId,
+            sellerEmail: sellerEmail,
+            buyerEmail: buyerEmail,
+          )
         : null;
     final sellerId = firstItem?['itemId']?.toString().trim() ?? '';
     final sellerUsername = firstItem?['sellerName']?.toString().trim() ?? '';

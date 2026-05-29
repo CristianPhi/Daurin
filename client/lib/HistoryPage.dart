@@ -15,17 +15,19 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   late final Future<_HistoryData> _historyFuture;
+  late final Future<List<_ChatThreadData>> _chatThreadsFuture;
 
   @override
   void initState() {
     super.initState();
     _historyFuture = _loadHistoryData();
+    _chatThreadsFuture = _loadChatThreads();
   }
 
   void _openGeneralChat(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ChatPage()),
+    );
   }
 
   Future<_HistoryData> _loadHistoryData() async {
@@ -69,10 +71,42 @@ class _HistoryPageState extends State<HistoryPage> {
     return const _HistoryData(buy: [], sell: []);
   }
 
+  Future<List<_ChatThreadData>> _loadChatThreads() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userEmail = prefs.getString('account_email')?.trim() ?? '';
+    if (userEmail.isEmpty) {
+      return const <_ChatThreadData>[];
+    }
+
+    try {
+      final response = await getJsonWithFallback(
+        path: '/chat/threads?userEmail=${Uri.encodeComponent(userEmail)}',
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          final threads = <_ChatThreadData>[];
+          for (final entry in decoded) {
+            if (entry is Map<String, dynamic>) {
+              threads.add(_ChatThreadData.fromJson(entry, userEmail));
+            }
+          }
+          threads.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+          return threads;
+        }
+      }
+    } catch (_) {
+      // fall through to empty data
+    }
+
+    return const <_ChatThreadData>[];
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Riwayat Transaksi'),
@@ -90,6 +124,7 @@ class _HistoryPageState extends State<HistoryPage> {
             tabs: [
               Tab(text: 'Buy History'),
               Tab(text: 'Sell History'),
+              Tab(text: 'Chat'),
             ],
           ),
         ),
@@ -101,11 +136,18 @@ class _HistoryPageState extends State<HistoryPage> {
             }
 
             final data = snapshot.data ?? const _HistoryData(buy: [], sell: []);
-            return TabBarView(
-              children: [
-                _HistoryList(type: HistoryType.buy, items: data.buy),
-                _HistoryList(type: HistoryType.sell, items: data.sell),
-              ],
+            return FutureBuilder<List<_ChatThreadData>>(
+              future: _chatThreadsFuture,
+              builder: (context, chatSnapshot) {
+                final threads = chatSnapshot.data ?? const <_ChatThreadData>[];
+                return TabBarView(
+                  children: [
+                    _HistoryList(type: HistoryType.buy, items: data.buy),
+                    _HistoryList(type: HistoryType.sell, items: data.sell),
+                    _ChatThreadList(threads: threads),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -122,6 +164,130 @@ class _HistoryData {
 }
 
 enum HistoryType { buy, sell }
+
+class _ChatThreadData {
+  const _ChatThreadData({
+    required this.threadId,
+    required this.sellerId,
+    required this.sellerUsername,
+    required this.sellerName,
+    required this.sellerEmail,
+    required this.buyerName,
+    required this.buyerEmail,
+    required this.lastMessage,
+    required this.lastMessageAt,
+    required this.isCurrentUserBuyer,
+  });
+
+  final String threadId;
+  final String sellerId;
+  final String sellerUsername;
+  final String sellerName;
+  final String sellerEmail;
+  final String buyerName;
+  final String buyerEmail;
+  final String lastMessage;
+  final DateTime lastMessageAt;
+  final bool isCurrentUserBuyer;
+
+  factory _ChatThreadData.fromJson(Map<String, dynamic> json, String userEmail) {
+    final lastMessageAtText = json['lastMessageAt']?.toString() ?? '';
+    final parsedLastMessageAt = DateTime.tryParse(lastMessageAtText)?.toLocal() ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+    final sellerEmail = json['sellerEmail']?.toString() ?? '';
+    final buyerEmail = json['buyerEmail']?.toString() ?? '';
+    final isCurrentUserBuyer =
+        buyerEmail.trim().toLowerCase() == userEmail.trim().toLowerCase();
+
+    return _ChatThreadData(
+      threadId: json['threadId']?.toString() ?? '',
+      sellerId: json['sellerId']?.toString() ?? '',
+      sellerUsername: json['sellerUsername']?.toString() ?? '',
+      sellerName: json['sellerName']?.toString() ?? '',
+      sellerEmail: sellerEmail,
+      buyerName: json['buyerName']?.toString() ?? '',
+      buyerEmail: buyerEmail,
+      lastMessage: json['lastMessage']?.toString() ?? '',
+      lastMessageAt: parsedLastMessageAt,
+      isCurrentUserBuyer: isCurrentUserBuyer,
+    );
+  }
+
+  String get peerLabel {
+    if (isCurrentUserBuyer) {
+      if (sellerName.isNotEmpty) return sellerName;
+      if (sellerUsername.isNotEmpty) return sellerUsername;
+      return sellerEmail;
+    }
+
+    if (buyerName.isNotEmpty) return buyerName;
+    return buyerEmail;
+  }
+}
+
+class _ChatThreadList extends StatelessWidget {
+  const _ChatThreadList({required this.threads});
+
+  final List<_ChatThreadData> threads;
+
+  @override
+  Widget build(BuildContext context) {
+    if (threads.isEmpty) {
+      return const Center(child: Text('Belum ada chat.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 16),
+      itemCount: threads.length,
+      itemBuilder: (context, index) {
+        final thread = threads[index];
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            title: Text(
+              thread.peerLabel,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              thread.lastMessage.isNotEmpty
+                  ? thread.lastMessage
+                  : 'Mulai chat',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Text(
+              '${thread.lastMessageAt.hour.toString().padLeft(2, '0')}:${thread.lastMessageAt.minute.toString().padLeft(2, '0')}',
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ChatPage(
+                    threadId: thread.threadId,
+                    sellerId: thread.sellerId,
+                    sellerUsername: thread.sellerUsername,
+                    sellerName: thread.sellerName,
+                    sellerEmail: thread.sellerEmail,
+                    buyerName: thread.buyerName,
+                    buyerEmail: thread.buyerEmail,
+                    draftMode: false,
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
 
 class _HistoryList extends StatelessWidget {
   const _HistoryList({required this.type, required this.items});

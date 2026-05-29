@@ -11,6 +11,7 @@ import 'LoginPage.dart';
 import 'api_client.dart';
 import 'AccountPage.dart';
 import 'ChatPage.dart';
+import 'chat_thread_id.dart';
 import 'PaymentPage.dart';
 import 'HistoryPage.dart';
 import 'pin_gate.dart';
@@ -318,7 +319,21 @@ class _HomePageState extends State<HomePage> {
   Future<void> _logout() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final locationStatus = prefs.getString('location_status');
+      final detectedLocationText = prefs.getString('detected_location_text');
+      final accountAddress = prefs.getString('account_address');
+
       await prefs.clear();
+
+      if (locationStatus != null) {
+        await prefs.setString('location_status', locationStatus);
+      }
+      if (detectedLocationText != null) {
+        await prefs.setString('detected_location_text', detectedLocationText);
+      }
+      if (accountAddress != null) {
+        await prefs.setString('account_address', accountAddress);
+      }
 
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
@@ -531,6 +546,89 @@ class _HomePageState extends State<HomePage> {
     return uniqueParts.take(3).join(', ');
   }
 
+  Map<String, dynamic> _buildDetectedAddressPayload(
+    Placemark? placemark,
+    String locationText,
+  ) {
+    String pickFirst(Iterable<String?> values, String fallback) {
+      for (final value in values) {
+        final normalized = value?.trim() ?? '';
+        if (normalized.isNotEmpty) {
+          return normalized;
+        }
+      }
+
+      return fallback;
+    }
+
+    final street = pickFirst([
+      placemark?.street,
+      placemark?.subLocality,
+      placemark?.subAdministrativeArea,
+      placemark?.locality,
+    ], locationText);
+    final city = pickFirst([
+      placemark?.locality,
+      placemark?.subAdministrativeArea,
+    ], locationText);
+    final province = pickFirst([
+      placemark?.administrativeArea,
+      placemark?.country,
+    ], locationText);
+    final postalCode = pickFirst([placemark?.postalCode], '00000');
+
+    return {
+      'street': street,
+      'city': city,
+      'province': province,
+      'postalCode': postalCode,
+      'rt': placemark?.subThoroughfare?.trim().isNotEmpty == true
+          ? placemark?.subThoroughfare?.trim()
+          : null,
+      'rw': placemark?.thoroughfare?.trim().isNotEmpty == true
+          ? placemark?.thoroughfare?.trim()
+          : null,
+      'isDefault': true,
+    };
+  }
+
+  Future<void> _saveDetectedLocationToDatabase(
+    Placemark? placemark,
+    String locationText,
+  ) async {
+    final payload = _buildDetectedAddressPayload(placemark, locationText);
+
+    try {
+      final response = await getJsonWithFallback(path: '/auth/addresses');
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is List && decoded.isNotEmpty) {
+          final addresses = decoded.whereType<Map<String, dynamic>>().toList(
+            growable: false,
+          );
+          if (addresses.isNotEmpty) {
+            final defaultIndex = addresses.indexWhere(
+              (address) => address['isDefault'] == true,
+            );
+            final targetIndex = defaultIndex >= 0 ? defaultIndex : 0;
+            await patchJsonWithFallback(
+              path: '/auth/addresses/$targetIndex',
+              body: jsonEncode(payload),
+            );
+            return;
+          }
+        }
+      }
+
+      await postJsonWithFallback(
+        path: '/auth/addresses',
+        body: jsonEncode(payload),
+      );
+    } catch (error) {
+      debugPrint('Gagal menyimpan lokasi ke database: $error');
+    }
+  }
+
   Future<void> _showFaqDialog() async {
     await showDialog<void>(
       context: context,
@@ -593,6 +691,7 @@ class _HomePageState extends State<HomePage> {
         ),
       );
       String locationText = 'Lokasi terdeteksi';
+      Placemark? detectedPlacemark;
 
       try {
         final placemarks = await placemarkFromCoordinates(
@@ -600,16 +699,20 @@ class _HomePageState extends State<HomePage> {
           position.longitude,
         );
         if (placemarks.isNotEmpty) {
-          locationText = _formatLocationLabel(placemarks.first);
+          detectedPlacemark = placemarks.first;
+          locationText = _formatLocationLabel(detectedPlacemark);
         }
       } catch (_) {
         locationText = 'Lokasi terdeteksi';
       }
 
+      await _saveDetectedLocationToDatabase(detectedPlacemark, locationText);
+
       final previousLocationText = _detectedLocationText;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('location_status', 'Aktif');
       await prefs.setString('detected_location_text', locationText);
+      await prefs.setString('account_address', locationText);
 
       if (!mounted) return;
       setState(() {
@@ -665,7 +768,11 @@ class _HomePageState extends State<HomePage> {
         sellerEmail != null &&
         sellerEmail.isNotEmpty;
     final threadId = hasSellerData
-        ? '${item.id.trim().toLowerCase()}__${sellerEmail.toLowerCase()}__${buyerEmail.toLowerCase()}'
+        ? buildChatThreadId(
+            itemId: item.id,
+            sellerEmail: sellerEmail,
+            buyerEmail: buyerEmail,
+          )
         : 'draft__${item.id.trim().toLowerCase()}__${buyerEmail.toLowerCase()}';
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -1887,7 +1994,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                mainAxisExtent: 338,
+                mainAxisExtent: 392,
               ),
               itemBuilder: (context, index) => _ItemCard(
                 item: promoItems[index],
@@ -2014,6 +2121,7 @@ class _HeaderBar extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [

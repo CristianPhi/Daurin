@@ -107,15 +107,13 @@ export class ChatService {
   }
 
   private resolveThreadId(dto: CreateChatThreadDto) {
-    const providedThreadId = dto.threadId?.trim();
-    if (providedThreadId) {
-      return providedThreadId;
-    }
-
-    return [
-      dto.sellerId.trim().toLowerCase(),
+    const itemId = dto.sellerId.trim().toLowerCase();
+    const participants = [
+      this.normalizeEmail(dto.sellerEmail),
       this.normalizeEmail(dto.buyerEmail),
-    ].join('__');
+    ].sort();
+
+    return [itemId, ...participants].join('__');
   }
 
   private normalizeEmail(value: string) {
