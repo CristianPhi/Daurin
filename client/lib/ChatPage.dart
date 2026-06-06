@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
+import 'chat_thread_id.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({
@@ -33,6 +34,7 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   late String _threadId;
+  String _currentUserEmail = '';
   final TextEditingController _messageController = TextEditingController();
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = true;
@@ -41,9 +43,26 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
-    _threadId =
-        widget.threadId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    _loadConversation();
+    _initChat();
+  }
+
+  Future<void> _initChat() async {
+    final prefs = await SharedPreferences.getInstance();
+    _currentUserEmail =
+        prefs.getString('account_email')?.trim().toLowerCase() ?? '';
+
+    if (_hasRemoteContext) {
+      _threadId = buildChatThreadId(
+        itemId: widget.sellerId!.trim(),
+        sellerEmail: widget.sellerEmail!.trim(),
+        buyerEmail: widget.buyerEmail!.trim(),
+      );
+    } else {
+      _threadId =
+          widget.threadId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    }
+
+    await _loadConversation();
   }
 
   @override
@@ -91,15 +110,32 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Map<String, dynamic> _normalizeMessage(Map<String, dynamic> msg) {
-    final senderEmail = msg['senderEmail']?.toString() ?? '';
-    final buyerEmail = widget.buyerEmail?.trim().toLowerCase() ?? '';
-    final isUser = senderEmail.trim().toLowerCase() == buyerEmail;
+    final senderEmail = msg['senderEmail']?.toString().trim().toLowerCase() ?? '';
+    final isUser = senderEmail.isNotEmpty &&
+        senderEmail == _currentUserEmail;
 
     return {
       'text': msg['text']?.toString() ?? '',
       'isUser': isUser,
       'time': _formatTime(msg['sentAt']),
     };
+  }
+
+  String get _peerTitle {
+    if (!_hasRemoteContext) {
+      return widget.sellerUsername ?? widget.sellerName ?? 'Chat';
+    }
+
+    final isCurrentUserBuyer =
+        _currentUserEmail == widget.buyerEmail?.trim().toLowerCase();
+    if (isCurrentUserBuyer) {
+      return widget.sellerUsername ??
+          widget.sellerName ??
+          widget.sellerEmail ??
+          'Chat';
+    }
+
+    return widget.buyerName ?? widget.buyerEmail ?? 'Chat';
   }
 
   String _formatTime(dynamic value) {
@@ -132,7 +168,7 @@ class _ChatPageState extends State<ChatPage> {
 
     try {
       if (_hasRemoteContext && senderEmail.isNotEmpty) {
-        await postJsonWithFallback(
+        final response = await postJsonWithFallback(
           path: '/chat/messages',
           body: jsonEncode({
             'threadId': _threadId,
@@ -147,6 +183,10 @@ class _ChatPageState extends State<ChatPage> {
             'text': text,
           }),
         );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw Exception('Gagal mengirim pesan (${response.statusCode})');
+        }
+        await _loadConversation();
       }
     } catch (e) {
       if (!mounted) return;
@@ -162,9 +202,8 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.sellerUsername ?? widget.sellerName ?? 'Chat';
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(_peerTitle)),
       body: Column(
         children: [
           Expanded(

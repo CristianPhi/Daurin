@@ -127,6 +127,65 @@ class _HomePageState extends State<HomePage> {
       _detectedLocationText =
           prefs.getString('detected_location_text') ?? _detectedLocationText;
     });
+    await _loadAddressesFromDatabase();
+  }
+
+  String _formatAddressLabel(Map<String, dynamic> address) {
+    final parts = <String>[
+      address['street']?.toString() ?? '',
+      address['city']?.toString() ?? '',
+      address['province']?.toString() ?? '',
+      address['postalCode']?.toString() ?? '',
+    ].where((part) => part.trim().isNotEmpty).toList();
+
+    if (parts.isEmpty) {
+      return 'Lokasi tersimpan';
+    }
+
+    return parts.join(', ');
+  }
+
+  Future<void> _loadAddressesFromDatabase() async {
+    final token = await getAuthToken();
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    try {
+      final response = await getJsonWithFallback(path: '/auth/addresses');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List || decoded.isEmpty) {
+        return;
+      }
+
+      final addresses = decoded.whereType<Map<String, dynamic>>().toList();
+      if (addresses.isEmpty) {
+        return;
+      }
+
+      final defaultAddress = addresses.firstWhere(
+        (address) => address['isDefault'] == true,
+        orElse: () => addresses.first,
+      );
+      final label = _formatAddressLabel(defaultAddress);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('account_address', label);
+      await prefs.setString('detected_location_text', label);
+      await prefs.setString('location_status', 'Aktif');
+
+      if (!mounted) return;
+      setState(() {
+        _detectedLocationText = label;
+        _locationStatus = 'Aktif';
+        _accountAddressController.text = label;
+      });
+    } catch (error) {
+      debugPrint('Gagal memuat alamat dari database: $error');
+    }
   }
 
   String? get _currentAccountName {
@@ -451,7 +510,11 @@ class _HomePageState extends State<HomePage> {
               cartItem.item.sellerEmail!.isEmpty ||
               _currentAccountEmail == null)
           ? null
-          : '${cartItem.item.id.trim().toLowerCase()}__${cartItem.item.sellerEmail!.trim().toLowerCase()}__${_currentAccountEmail!.toLowerCase()}';
+          : buildChatThreadId(
+              itemId: cartItem.item.id,
+              sellerEmail: cartItem.item.sellerEmail!,
+              buyerEmail: _currentAccountEmail!,
+            );
 
       return {
         'itemId': cartItem.item.id,
@@ -520,19 +583,22 @@ class _HomePageState extends State<HomePage> {
 
   String _formatLocationLabel(Placemark placemark) {
     final parts = <String>[
+      placemark.street ?? '',
+      placemark.thoroughfare ?? '',
+      placemark.subThoroughfare ?? '',
+      placemark.name ?? '',
       placemark.subLocality ?? '',
-      placemark.subAdministrativeArea ?? '',
       placemark.locality ?? '',
+      placemark.subAdministrativeArea ?? '',
       placemark.administrativeArea ?? '',
+      placemark.postalCode ?? '',
     ].where((part) => part.trim().isNotEmpty).toList();
 
     final uniqueParts = <String>[];
     for (final part in parts) {
       final normalized = part.trim();
-      if (uniqueParts.isEmpty || uniqueParts.last != normalized) {
-        if (!uniqueParts.contains(normalized)) {
-          uniqueParts.add(normalized);
-        }
+      if (!uniqueParts.contains(normalized)) {
+        uniqueParts.add(normalized);
       }
     }
 
@@ -543,7 +609,7 @@ class _HomePageState extends State<HomePage> {
           : 'Lokasi terdeteksi';
     }
 
-    return uniqueParts.take(3).join(', ');
+    return uniqueParts.take(5).join(', ');
   }
 
   Map<String, dynamic> _buildDetectedAddressPayload(
@@ -563,13 +629,14 @@ class _HomePageState extends State<HomePage> {
 
     final street = pickFirst([
       placemark?.street,
+      placemark?.thoroughfare,
+      placemark?.name,
       placemark?.subLocality,
-      placemark?.subAdministrativeArea,
-      placemark?.locality,
     ], locationText);
     final city = pickFirst([
       placemark?.locality,
       placemark?.subAdministrativeArea,
+      placemark?.subLocality,
     ], locationText);
     final province = pickFirst([
       placemark?.administrativeArea,
@@ -582,20 +649,20 @@ class _HomePageState extends State<HomePage> {
       'city': city,
       'province': province,
       'postalCode': postalCode,
-      'rt': placemark?.subThoroughfare?.trim().isNotEmpty == true
-          ? placemark?.subThoroughfare?.trim()
-          : null,
-      'rw': placemark?.thoroughfare?.trim().isNotEmpty == true
-          ? placemark?.thoroughfare?.trim()
-          : null,
       'isDefault': true,
     };
   }
 
-  Future<void> _saveDetectedLocationToDatabase(
+  Future<bool> _saveDetectedLocationToDatabase(
     Placemark? placemark,
     String locationText,
   ) async {
+    final token = await getAuthToken();
+    if (token == null || token.isEmpty) {
+      debugPrint('Gagal menyimpan lokasi: belum login.');
+      return false;
+    }
+
     final payload = _buildDetectedAddressPayload(placemark, locationText);
 
     try {
@@ -611,21 +678,24 @@ class _HomePageState extends State<HomePage> {
               (address) => address['isDefault'] == true,
             );
             final targetIndex = defaultIndex >= 0 ? defaultIndex : 0;
-            await patchJsonWithFallback(
+            final patchResponse = await patchJsonWithFallback(
               path: '/auth/addresses/$targetIndex',
               body: jsonEncode(payload),
             );
-            return;
+            return patchResponse.statusCode >= 200 &&
+                patchResponse.statusCode < 300;
           }
         }
       }
 
-      await postJsonWithFallback(
+      final postResponse = await postJsonWithFallback(
         path: '/auth/addresses',
         body: jsonEncode(payload),
       );
+      return postResponse.statusCode >= 200 && postResponse.statusCode < 300;
     } catch (error) {
       debugPrint('Gagal menyimpan lokasi ke database: $error');
+      return false;
     }
   }
 
@@ -706,7 +776,10 @@ class _HomePageState extends State<HomePage> {
         locationText = 'Lokasi terdeteksi';
       }
 
-      await _saveDetectedLocationToDatabase(detectedPlacemark, locationText);
+      final savedToDatabase = await _saveDetectedLocationToDatabase(
+        detectedPlacemark,
+        locationText,
+      );
 
       final previousLocationText = _detectedLocationText;
       final prefs = await SharedPreferences.getInstance();
@@ -721,8 +794,14 @@ class _HomePageState extends State<HomePage> {
         _accountAddressController.text = locationText;
       });
 
-      if (previousLocationText != locationText) {
-        _showMessage('Lokasi berhasil dideteksi: $locationText');
+      if (savedToDatabase) {
+        if (previousLocationText != locationText) {
+          _showMessage('Lokasi berhasil dideteksi dan disimpan: $locationText');
+        }
+      } else {
+        _showMessage(
+          'Lokasi terdeteksi: $locationText. Gagal simpan ke akun, coba login ulang.',
+        );
       }
     } catch (error) {
       _showMessage('Gagal detect lokasi: $error');
@@ -1268,6 +1347,8 @@ class _HomePageState extends State<HomePage> {
           child: AccountPage(
             username: _currentAccountName ?? 'Guest',
             email: _currentAccountEmail ?? 'No email',
+            locationStatus: _locationStatus,
+            locationText: _detectedLocationText,
             isDarkMode: _darkMode,
             onToggleDarkMode: _setDarkMode,
             onDetectLocation: _detectCurrentLocation,
@@ -1994,7 +2075,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                mainAxisExtent: 392,
+                mainAxisExtent: 360,
               ),
               itemBuilder: (context, index) => _ItemCard(
                 item: promoItems[index],
@@ -2084,7 +2165,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                mainAxisExtent: 338,
+                mainAxisExtent: 310,
               ),
               itemBuilder: (context, index) => _ItemCard(
                 item: visibleItems[index],
@@ -2230,6 +2311,7 @@ class _ItemCard extends StatelessWidget {
                 : Colors.black12,
           ),
         ),
+        clipBehavior: Clip.hardEdge,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Stack(
@@ -2243,6 +2325,7 @@ class _ItemCard extends StatelessWidget {
                     opacity: isSoldOut ? 0.55 : 1,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           children: [
@@ -2387,12 +2470,12 @@ class _ItemCard extends StatelessWidget {
                             child: Image.network(
                               buildApiUrl(item.imageUrl!),
                               width: double.infinity,
-                              height: 120,
+                              height: 100,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
                                   width: double.infinity,
-                                  height: 120,
+                                  height: 100,
                                   color: Colors.grey.shade200,
                                   alignment: Alignment.center,
                                   child: Column(
@@ -2421,7 +2504,7 @@ class _ItemCard extends StatelessWidget {
                                     }
                                     return Container(
                                       width: double.infinity,
-                                      height: 120,
+                                      height: 100,
                                       color: Colors.grey.shade200,
                                       alignment: Alignment.center,
                                       child: const SizedBox(
@@ -2435,11 +2518,11 @@ class _ItemCard extends StatelessWidget {
                                   },
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                         ],
                         Text(
                           item.name,
-                          maxLines: 2,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
@@ -2491,50 +2574,7 @@ class _ItemCard extends StatelessWidget {
                             fontSize: 12,
                           ),
                         ),
-                        if (item.category != null &&
-                            item.category!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            item.category!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.green.shade800,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                        if (item.description != null &&
-                            item.description!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            item.description!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                        if (item.promoNote != null &&
-                            item.promoNote!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            item.promoNote!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.deepOrange,
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         if (!isSoldOut && onChatSeller != null)
                           Row(
                             children: [
