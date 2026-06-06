@@ -15,19 +15,23 @@ class HistoryPage extends StatefulWidget {
 
 class _HistoryPageState extends State<HistoryPage> {
   late final Future<_HistoryData> _historyFuture;
-  late final Future<List<_ChatThreadData>> _chatThreadsFuture;
+  List<_ChatThreadData> _chatThreads = [];
+  bool _isLoadingChats = true;
 
   @override
   void initState() {
     super.initState();
     _historyFuture = _loadHistoryData();
-    _chatThreadsFuture = _loadChatThreads();
+    _refreshChatThreads();
   }
 
-  void _openGeneralChat(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ChatPage()),
-    );
+  Future<void> _refreshChatThreads() async {
+    final threads = await _loadChatThreads();
+    if (!mounted) return;
+    setState(() {
+      _chatThreads = threads;
+      _isLoadingChats = false;
+    });
   }
 
   Future<_HistoryData> _loadHistoryData() async {
@@ -112,13 +116,6 @@ class _HistoryPageState extends State<HistoryPage> {
           title: const Text('Riwayat Transaksi'),
           backgroundColor: Colors.green.shade700,
           foregroundColor: Colors.white,
-          actions: [
-            IconButton(
-              onPressed: () => _openGeneralChat(context),
-              icon: const Icon(Icons.chat_bubble_outline),
-              tooltip: 'Chat',
-            ),
-          ],
           bottom: const TabBar(
             indicatorColor: Colors.white,
             tabs: [
@@ -136,18 +133,17 @@ class _HistoryPageState extends State<HistoryPage> {
             }
 
             final data = snapshot.data ?? const _HistoryData(buy: [], sell: []);
-            return FutureBuilder<List<_ChatThreadData>>(
-              future: _chatThreadsFuture,
-              builder: (context, chatSnapshot) {
-                final threads = chatSnapshot.data ?? const <_ChatThreadData>[];
-                return TabBarView(
-                  children: [
-                    _HistoryList(type: HistoryType.buy, items: data.buy),
-                    _HistoryList(type: HistoryType.sell, items: data.sell),
-                    _ChatThreadList(threads: threads),
-                  ],
-                );
-              },
+            return TabBarView(
+              children: [
+                _HistoryList(type: HistoryType.buy, items: data.buy),
+                _HistoryList(type: HistoryType.sell, items: data.sell),
+                _isLoadingChats
+                    ? const Center(child: CircularProgressIndicator())
+                    : _ChatThreadList(
+                        threads: _chatThreads,
+                        onRefresh: _refreshChatThreads,
+                      ),
+              ],
             );
           },
         ),
@@ -226,17 +222,32 @@ class _ChatThreadData {
 }
 
 class _ChatThreadList extends StatelessWidget {
-  const _ChatThreadList({required this.threads});
+  const _ChatThreadList({
+    required this.threads,
+    required this.onRefresh,
+  });
 
   final List<_ChatThreadData> threads;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     if (threads.isEmpty) {
-      return const Center(child: Text('Belum ada chat.'));
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 120),
+            Center(child: Text('Belum ada chat.')),
+          ],
+        ),
+      );
     }
 
-    return ListView.builder(
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.builder(
       padding: const EdgeInsets.only(bottom: 16),
       itemCount: threads.length,
       itemBuilder: (context, index) {
@@ -266,8 +277,8 @@ class _ChatThreadList extends StatelessWidget {
               '${thread.lastMessageAt.hour.toString().padLeft(2, '0')}:${thread.lastMessageAt.minute.toString().padLeft(2, '0')}',
               style: const TextStyle(fontSize: 12, color: Colors.black54),
             ),
-            onTap: () {
-              Navigator.of(context).push(
+            onTap: () async {
+              await Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => ChatPage(
                     threadId: thread.threadId,
@@ -281,10 +292,12 @@ class _ChatThreadList extends StatelessWidget {
                   ),
                 ),
               );
+              await onRefresh();
             },
           ),
         );
       },
+      ),
     );
   }
 }

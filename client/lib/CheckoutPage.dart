@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import 'api_client.dart';
+import 'chat_thread_id.dart';
 import 'pin_gate.dart';
 
 class CheckoutPage extends StatefulWidget {
@@ -279,7 +280,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
             : (sellerEmail.isNotEmpty &&
                   buyerEmail.isNotEmpty &&
                   itemId.isNotEmpty)
-            ? '${itemId.toLowerCase()}__${sellerEmail.toLowerCase()}__${buyerEmail.toLowerCase()}'
+            ? buildChatThreadId(
+                itemId: itemId,
+                sellerEmail: sellerEmail,
+                buyerEmail: buyerEmail,
+              )
             : '';
         if (resolvedThreadId.isNotEmpty) {
           payload['threadId'] = resolvedThreadId;
