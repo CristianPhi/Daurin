@@ -2075,10 +2075,11 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                mainAxisExtent: 360,
+                mainAxisExtent: 320,
               ),
               itemBuilder: (context, index) => _ItemCard(
                 item: promoItems[index],
+                compact: true,
                 onAddToCart: _addToCart,
                 onChatSeller: _openSellerChat,
               ),
@@ -2285,15 +2286,23 @@ class _HeaderBar extends StatelessWidget {
 }
 
 class _ItemCard extends StatelessWidget {
-  const _ItemCard({required this.item, this.onAddToCart, this.onChatSeller});
+  const _ItemCard({
+    required this.item,
+    this.compact = false,
+    this.onAddToCart,
+    this.onChatSeller,
+  });
 
   final _Item item;
+  final bool compact;
   final void Function(_Item)? onAddToCart;
   final Future<void> Function(_Item)? onChatSeller;
 
   @override
   Widget build(BuildContext context) {
     final isSoldOut = item.quantity <= 0;
+    final imageHeight = compact ? 72.0 : 100.0;
+    final showBottomActions = !compact && !isSoldOut && onChatSeller != null;
 
     return InkWell(
       onTap: () => _showDetail(context),
@@ -2470,12 +2479,12 @@ class _ItemCard extends StatelessWidget {
                             child: Image.network(
                               buildApiUrl(item.imageUrl!),
                               width: double.infinity,
-                              height: 100,
+                              height: imageHeight,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
                                   width: double.infinity,
-                                  height: 100,
+                                  height: imageHeight,
                                   color: Colors.grey.shade200,
                                   alignment: Alignment.center,
                                   child: Column(
@@ -2504,7 +2513,7 @@ class _ItemCard extends StatelessWidget {
                                     }
                                     return Container(
                                       width: double.infinity,
-                                      height: 100,
+                                      height: imageHeight,
                                       color: Colors.grey.shade200,
                                       alignment: Alignment.center,
                                       child: const SizedBox(
@@ -2518,7 +2527,7 @@ class _ItemCard extends StatelessWidget {
                                   },
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          SizedBox(height: compact ? 4 : 6),
                         ],
                         Text(
                           item.name,
@@ -2574,8 +2583,8 @@ class _ItemCard extends StatelessWidget {
                             fontSize: 12,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        if (!isSoldOut && onChatSeller != null)
+                        if (showBottomActions) ...[
+                          const SizedBox(height: 4),
                           Row(
                             children: [
                               Expanded(
@@ -2590,7 +2599,11 @@ class _ItemCard extends StatelessWidget {
                                   label: const Text('Add'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.green.shade700,
-                                    minimumSize: const Size(72, 36),
+                                    minimumSize: const Size(72, 32),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2604,13 +2617,17 @@ class _ItemCard extends StatelessWidget {
                                   ),
                                   label: const Text('Chat'),
                                   style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(72, 36),
+                                    minimumSize: const Size(72, 32),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                   ),
                                 ),
                               ),
                             ],
-                          )
-                        else if (!isSoldOut)
+                          ),
+                        ] else if (!isSoldOut && !compact)
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [

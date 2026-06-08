@@ -25,11 +25,11 @@ export class ChatService {
         {
           $set: {
             threadId,
-            sellerId: dto.sellerId.trim(),
-            sellerUsername: dto.sellerUsername.trim(),
-            sellerName: dto.sellerName.trim(),
+            sellerId: (dto.sellerId ?? '').trim(),
+            sellerUsername: (dto.sellerUsername ?? '').trim(),
+            sellerName: (dto.sellerName ?? '').trim(),
             sellerEmail: this.normalizeEmail(dto.sellerEmail),
-            buyerName: dto.buyerName.trim(),
+            buyerName: (dto.buyerName ?? '').trim(),
             buyerEmail: this.normalizeEmail(dto.buyerEmail),
             participants: [
               this.normalizeEmail(dto.sellerEmail),
@@ -74,8 +74,8 @@ export class ChatService {
   async sendMessage(dto: SendChatMessageDto) {
     const thread = await this.upsertThread(dto);
     const senderEmail = this.normalizeEmail(dto.senderEmail);
-    const senderName = dto.senderName.trim();
-    const text = dto.text.trim();
+    const senderName = (dto.senderName ?? '').trim();
+    const text = (dto.text ?? '').trim();
 
     if (!senderEmail || !text) {
       throw new BadRequestException('Pesan tidak valid.');
@@ -107,7 +107,7 @@ export class ChatService {
   }
 
   private resolveThreadId(dto: CreateChatThreadDto) {
-    const itemId = dto.sellerId.trim().toLowerCase();
+    const itemId = (dto.sellerId ?? '').trim().toLowerCase();
     const participants = [
       this.normalizeEmail(dto.sellerEmail),
       this.normalizeEmail(dto.buyerEmail),
