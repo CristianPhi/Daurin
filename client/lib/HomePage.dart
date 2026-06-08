@@ -2089,96 +2089,113 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildHomePage() {
+ Widget _buildHomePage() {
     final visibleItems = _filteredItems;
 
     return RefreshIndicator(
       onRefresh: _loadItems,
       color: Colors.green.shade700,
-      child: ListView(
+      child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          _HeaderBar(
-            searchController: _searchController,
-            onFilterPressed: _showFilterSheet,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Item Terbaru',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                '${visibleItems.length} hasil',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+        slivers: [
+          // 1. Bagian Header Bar dibungkus menggunakan SliverToBoxAdapter
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HeaderBar(
+                  searchController: _searchController,
+                  onFilterPressed: _showFilterSheet,
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Item Terbaru',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '${visibleItems.length} hasil',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+
+          // 2. State Kondisional saat Loading / Kosong / Ada Data
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: CircularProgressIndicator()),
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: CircularProgressIndicator()),
+              ),
             )
           else if (visibleItems.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: _surfaceColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _borderColor),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.search_off,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Belum ada item yang cocok.',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Coba ubah kata kunci atau filter untuk menemukan item lain.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: _surfaceColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _borderColor),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.search_off,
+                      size: 48,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Belum ada item yang cocok.',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Coba ubah kata kunci atau filter untuk menemukan item lain.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
           else
-            GridView.builder(
-              itemCount: visibleItems.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 12),
+            // 3. Grid didesain menggunakan SliverGrid agar lazy-load items bekerja maksimal
+            SliverGrid(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
                 mainAxisExtent: 310,
               ),
-              itemBuilder: (context, index) => _ItemCard(
-                item: visibleItems[index],
-                onAddToCart: _addToCart,
-                onChatSeller: _openSellerChat,
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _ItemCard(
+                  item: visibleItems[index],
+                  onAddToCart: _addToCart,
+                  onChatSeller: _openSellerChat,
+                ),
+                childCount: visibleItems.length,
               ),
             ),
-          const SizedBox(height: 96),
+
+          // 4. Spacer bawah agar tidak terpotong oleh BottomNavigationBar
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 96),
+          ),
         ],
       ),
     );
   }
-}
 
 class _HeaderBar extends StatelessWidget {
   const _HeaderBar({
