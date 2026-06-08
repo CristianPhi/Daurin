@@ -156,6 +156,7 @@ class _ChatPageState extends State<ChatPage> {
     final senderName = prefs.getString('account_username') ?? 'User';
     final senderEmail = prefs.getString('account_email') ?? '';
 
+    final optimisticIndex = _messages.length;
     setState(() {
       _messages.add({
         'text': text,
@@ -172,24 +173,44 @@ class _ChatPageState extends State<ChatPage> {
           path: '/chat/messages',
           body: jsonEncode({
             'threadId': _threadId,
-            'sellerId': widget.sellerId,
-            'sellerUsername': widget.sellerUsername,
-            'sellerName': widget.sellerName,
-            'sellerEmail': widget.sellerEmail,
-            'buyerName': widget.buyerName,
-            'buyerEmail': widget.buyerEmail,
+            'sellerId': widget.sellerId?.trim() ?? '',
+            'sellerUsername':
+                widget.sellerUsername?.trim() ??
+                widget.sellerName?.trim() ??
+                'Seller',
+            'sellerName':
+                widget.sellerName?.trim() ??
+                widget.sellerUsername?.trim() ??
+                'Seller',
+            'sellerEmail': widget.sellerEmail?.trim() ?? '',
+            'buyerName': widget.buyerName?.trim() ?? senderName,
+            'buyerEmail': widget.buyerEmail?.trim() ?? senderEmail,
             'senderName': senderName,
-            'senderEmail': senderEmail,
+            'senderEmail': senderEmail.trim(),
             'text': text,
           }),
         );
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw Exception('Gagal mengirim pesan (${response.statusCode})');
+          final decoded = jsonDecode(response.body);
+          final message = decoded is Map<String, dynamic>
+              ? decoded['message']
+              : null;
+          throw Exception(
+            message is List
+                ? message.join(', ')
+                : message?.toString() ??
+                    'Gagal mengirim pesan (${response.statusCode})',
+          );
         }
         await _loadConversation();
       }
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        if (optimisticIndex >= 0 && optimisticIndex < _messages.length) {
+          _messages.removeAt(optimisticIndex);
+        }
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
