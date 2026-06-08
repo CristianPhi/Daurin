@@ -2218,7 +2218,6 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-}
 
 class _HeaderBar extends StatelessWidget {
   const _HeaderBar({
