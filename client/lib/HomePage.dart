@@ -1514,59 +1514,12 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    return Column(
-      children: [
-        Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Ringkasan Keranjang',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [const Text('Subtotal'), Text('Rp $_cartTotal')],
-                ),
-                if (_discountAmount > 0) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Diskon voucher'),
-                      Text('- Rp $_discountAmount'),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Total Bayar',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Rp $_finalCartTotal',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_recommendedVoucher != null && _appliedVoucherCode == null) ...[
-          Card(
-            color: Colors.green.shade50,
-            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -1576,180 +1529,240 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Voucher terbaik untuk keranjang Anda',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    'Ringkasan Keranjang',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                  const SizedBox(height: 8),
-                  Text(_recommendedVoucher!.title),
-                  const SizedBox(height: 4),
-                  Text(_recommendedVoucher!.description),
-                  if (_recommendedVoucher!.minCartValue != null)
-                    Text(
-                      'Syarat: minimal belanja Rp ${_recommendedVoucher!.minCartValue}',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [const Text('Subtotal'), Text('Rp $_cartTotal')],
+                  ),
+                  if (_discountAmount > 0) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Diskon voucher'),
+                        Text('- Rp $_discountAmount'),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total Bayar',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                  if (_recommendedVoucher!.requiredCategory != null)
-                    Text(
-                      'Kategori: ${_recommendedVoucher!.requiredCategory}',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
+                      Text(
+                        'Rp $_finalCartTotal',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => _applyVoucher(_recommendedVoucher!.id),
-                      child: const Text('Gunakan voucher ini'),
-                    ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
-        ],
-        Expanded(
-          child: ListView.separated(
-            itemCount: _cart.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemBuilder: (context, idx) {
-              final ci = _cart[idx];
-              return Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                elevation: 1,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      if (ci.item.imageUrl != null)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            buildApiUrl(ci.item.imageUrl!),
-                            width: 70,
-                            height: 70,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                width: 70,
-                                height: 70,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(Icons.image_not_supported),
-                              );
-                            },
-                          ),
-                        )
-                      else
-                        Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.image_not_supported),
-                        ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ci.item.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text('Rp ${ci.item.price} x ${ci.quantity}'),
-                            if (ci.item.discountPercent != null &&
-                                ci.item.discountPercent! > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  '${ci.item.discountPercent}% OFF',
-                                  style: TextStyle(
-                                    color: Colors.green.shade700,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                          ],
+        ),
+        if (_recommendedVoucher != null && _appliedVoucherCode == null)
+          SliverToBoxAdapter(
+            child: Card(
+              color: Colors.green.shade50,
+              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Voucher terbaik untuk keranjang Anda',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_recommendedVoucher!.title),
+                    const SizedBox(height: 4),
+                    Text(_recommendedVoucher!.description),
+                    if (_recommendedVoucher!.minCartValue != null)
+                      Text(
+                        'Syarat: minimal belanja Rp ${_recommendedVoucher!.minCartValue}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
                         ),
                       ),
-                      Column(
+                    if (_recommendedVoucher!.requiredCategory != null)
+                      Text(
+                        'Kategori: ${_recommendedVoucher!.requiredCategory}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => _applyVoucher(_recommendedVoucher!.id),
+                        child: const Text('Gunakan voucher ini'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          sliver: SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, idx) {
+                final ci = _cart[idx];
+                return Padding(
+                  padding: EdgeInsets.only(bottom: idx < _cart.length - 1 ? 12 : 0),
+                  child: Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    elevation: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            onPressed: () {
-                              if (ci.quantity > 1) {
-                                setState(() {
-                                  _cart[idx] = ci.copyWith(
-                                    quantity: ci.quantity - 1,
+                          if (ci.item.imageUrl != null)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                buildApiUrl(ci.item.imageUrl!),
+                                width: 70,
+                                height: 70,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 70,
+                                    height: 70,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.image_not_supported),
                                   );
-                                });
-                              } else {
-                                _removeFromCart(ci.item.id);
-                              }
-                            },
+                                },
+                              ),
+                            )
+                          else
+                            Container(
+                              width: 70,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.image_not_supported),
+                            ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  ci.item.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text('Rp ${ci.item.price} x ${ci.quantity}'),
+                                if (ci.item.discountPercent != null &&
+                                    ci.item.discountPercent! > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      '${ci.item.discountPercent}% OFF',
+                                      style: TextStyle(
+                                        color: Colors.green.shade700,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                          Text('${ci.quantity}'),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            onPressed: () {
-                              setState(() {
-                                _cart[idx] = ci.copyWith(
-                                  quantity: ci.quantity + 1,
-                                );
-                              });
-                            },
+                          Column(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline),
+                                onPressed: () {
+                                  if (ci.quantity > 1) {
+                                    setState(() {
+                                      _cart[idx] = ci.copyWith(
+                                        quantity: ci.quantity - 1,
+                                      );
+                                    });
+                                  } else {
+                                    _removeFromCart(ci.item.id);
+                                  }
+                                },
+                              ),
+                              Text('${ci.quantity}'),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                onPressed: () {
+                                  setState(() {
+                                    _cart[idx] = ci.copyWith(
+                                      quantity: ci.quantity + 1,
+                                    );
+                                  });
+                                },
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+              childCount: _cart.length,
+            ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              ElevatedButton.icon(
-                onPressed: _navigateToPaymentPage,
-                icon: const Icon(Icons.payment),
-                label: const Text('Bayar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _navigateToPaymentPage,
+                  icon: const Icon(Icons.payment),
+                  label: const Text('Bayar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade700,
+                  ),
                 ),
-              ),
-              FilledButton(
-                onPressed: () {
-                  setState(() {
-                    _cart.clear();
-                    _appliedVoucherCode = null;
-                    _appliedVoucherDiscountPercent = null;
-                  });
-                  _showMessage('Keranjang dikosongkan.');
-                },
-                child: const Text('Kosongkan'),
-              ),
-            ],
+                FilledButton(
+                  onPressed: () {
+                    setState(() {
+                      _cart.clear();
+                      _appliedVoucherCode = null;
+                      _appliedVoucherDiscountPercent = null;
+                    });
+                    _showMessage('Keranjang dikosongkan.');
+                  },
+                  child: const Text('Kosongkan'),
+                ),
+              ],
+            ),
           ),
+        ),
+        const SliverToBoxAdapter(
+          child: SizedBox(height: 16),
         ),
       ],
     );
@@ -1998,6 +2011,114 @@ class _HomePageState extends State<HomePage> {
     return list;
   }
 
+  Widget _buildHomePage() {
+    final visibleItems = _filteredItems;
+
+    return RefreshIndicator(
+      onRefresh: _loadItems,
+      color: Colors.green.shade700,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          // 1. Bagian Header Bar dibungkus menggunakan SliverToBoxAdapter
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HeaderBar(
+                  searchController: _searchController,
+                  onFilterPressed: _showFilterSheet,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Item Terbaru',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '${visibleItems.length} hasil',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+
+          // 2. State Kondisional saat Loading / Kosong / Ada Data
+          if (_isLoading)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            )
+          else if (visibleItems.isEmpty)
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: _surfaceColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _borderColor),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.search_off,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Belum ada item yang cocok.',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Coba ubah kata kunci atau filter untuk menemukan item lain.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            // 3. Grid menggunakan SliverGrid agar lazy-load items bekerja maksimal
+            SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: 310,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _ItemCard(
+                  item: visibleItems[index],
+                  onAddToCart: _addToCart,
+                  onChatSeller: _openSellerChat,
+                ),
+                childCount: visibleItems.length,
+              ),
+            ),
+
+          // 4. Spacer bawah agar tidak terpotong oleh BottomNavigationBar
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 96),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPromoPage() {
     final promoItems = _items
         .where(
@@ -2006,9 +2127,11 @@ class _HomePageState extends State<HomePage> {
               (item.discountPercent != null && item.discountPercent! > 0),
         )
         .toList();
+
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
+
     if (promoItems.isEmpty) {
       return Center(
         child: Text(
@@ -2019,6 +2142,7 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -2027,154 +2151,69 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: _borderColor),
       ),
-      child: Column(
-        children: [
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const Icon(Icons.local_offer, color: Colors.green, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Diskon & Promo',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              margin: const EdgeInsets.only(bottom: 16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.local_offer, color: Colors.green, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Diskon & Promo',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Lihat penawaran khusus dan item diskon yang dapat kamu tambahkan ke keranjang.',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                          const SizedBox(height: 6),
+                          Text(
+                            'Lihat penawaran khusus dan item diskon yang dapat kamu tambahkan ke keranjang.',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          Expanded(
-            child: GridView.builder(
-              itemCount: promoItems.length,
-              padding: const EdgeInsets.only(bottom: 90),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                mainAxisExtent: 320,
-              ),
-              itemBuilder: (context, index) => _ItemCard(
+          SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              mainAxisExtent: 300,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _ItemCard(
                 item: promoItems[index],
                 compact: true,
                 onAddToCart: _addToCart,
                 onChatSeller: _openSellerChat,
               ),
+              childCount: promoItems.length,
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHomePage() {
-    final visibleItems = _filteredItems;
-
-    return RefreshIndicator(
-      onRefresh: _loadItems,
-      color: Colors.green.shade700,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          _HeaderBar(
-            searchController: _searchController,
-            onFilterPressed: _showFilterSheet,
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 90),
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Item Terbaru',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                '${visibleItems.length} hasil',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (visibleItems.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: _surfaceColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _borderColor),
-              ),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.search_off,
-                    size: 48,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Belum ada item yang cocok.',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Coba ubah kata kunci atau filter untuk menemukan item lain.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            GridView.builder(
-              itemCount: visibleItems.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                mainAxisExtent: 310,
-              ),
-              itemBuilder: (context, index) => _ItemCard(
-                item: visibleItems[index],
-                onAddToCart: _addToCart,
-                onChatSeller: _openSellerChat,
-              ),
-            ),
-          const SizedBox(height: 96),
         ],
       ),
     );
