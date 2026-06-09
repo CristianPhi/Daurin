@@ -127,65 +127,6 @@ class _HomePageState extends State<HomePage> {
       _detectedLocationText =
           prefs.getString('detected_location_text') ?? _detectedLocationText;
     });
-    await _loadAddressesFromDatabase();
-  }
-
-  String _formatAddressLabel(Map<String, dynamic> address) {
-    final parts = <String>[
-      address['street']?.toString() ?? '',
-      address['city']?.toString() ?? '',
-      address['province']?.toString() ?? '',
-      address['postalCode']?.toString() ?? '',
-    ].where((part) => part.trim().isNotEmpty).toList();
-
-    if (parts.isEmpty) {
-      return 'Lokasi tersimpan';
-    }
-
-    return parts.join(', ');
-  }
-
-  Future<void> _loadAddressesFromDatabase() async {
-    final token = await getAuthToken();
-    if (token == null || token.isEmpty) {
-      return;
-    }
-
-    try {
-      final response = await getJsonWithFallback(path: '/auth/addresses');
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        return;
-      }
-
-      final decoded = jsonDecode(response.body);
-      if (decoded is! List || decoded.isEmpty) {
-        return;
-      }
-
-      final addresses = decoded.whereType<Map<String, dynamic>>().toList();
-      if (addresses.isEmpty) {
-        return;
-      }
-
-      final defaultAddress = addresses.firstWhere(
-        (address) => address['isDefault'] == true,
-        orElse: () => addresses.first,
-      );
-      final label = _formatAddressLabel(defaultAddress);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('account_address', label);
-      await prefs.setString('detected_location_text', label);
-      await prefs.setString('location_status', 'Aktif');
-
-      if (!mounted) return;
-      setState(() {
-        _detectedLocationText = label;
-        _locationStatus = 'Aktif';
-        _accountAddressController.text = label;
-      });
-    } catch (error) {
-      debugPrint('Gagal memuat alamat dari database: $error');
-    }
   }
 
   String? get _currentAccountName {
@@ -510,11 +451,7 @@ class _HomePageState extends State<HomePage> {
               cartItem.item.sellerEmail!.isEmpty ||
               _currentAccountEmail == null)
           ? null
-          : buildChatThreadId(
-              itemId: cartItem.item.id,
-              sellerEmail: cartItem.item.sellerEmail!,
-              buyerEmail: _currentAccountEmail!,
-            );
+          : '${cartItem.item.id.trim().toLowerCase()}__${cartItem.item.sellerEmail!.trim().toLowerCase()}__${_currentAccountEmail!.toLowerCase()}';
 
       return {
         'itemId': cartItem.item.id,
@@ -583,22 +520,19 @@ class _HomePageState extends State<HomePage> {
 
   String _formatLocationLabel(Placemark placemark) {
     final parts = <String>[
-      placemark.street ?? '',
-      placemark.thoroughfare ?? '',
-      placemark.subThoroughfare ?? '',
-      placemark.name ?? '',
       placemark.subLocality ?? '',
-      placemark.locality ?? '',
       placemark.subAdministrativeArea ?? '',
+      placemark.locality ?? '',
       placemark.administrativeArea ?? '',
-      placemark.postalCode ?? '',
     ].where((part) => part.trim().isNotEmpty).toList();
 
     final uniqueParts = <String>[];
     for (final part in parts) {
       final normalized = part.trim();
-      if (!uniqueParts.contains(normalized)) {
-        uniqueParts.add(normalized);
+      if (uniqueParts.isEmpty || uniqueParts.last != normalized) {
+        if (!uniqueParts.contains(normalized)) {
+          uniqueParts.add(normalized);
+        }
       }
     }
 
@@ -609,7 +543,7 @@ class _HomePageState extends State<HomePage> {
           : 'Lokasi terdeteksi';
     }
 
-    return uniqueParts.take(5).join(', ');
+    return uniqueParts.take(3).join(', ');
   }
 
   Map<String, dynamic> _buildDetectedAddressPayload(
@@ -629,14 +563,13 @@ class _HomePageState extends State<HomePage> {
 
     final street = pickFirst([
       placemark?.street,
-      placemark?.thoroughfare,
-      placemark?.name,
       placemark?.subLocality,
+      placemark?.subAdministrativeArea,
+      placemark?.locality,
     ], locationText);
     final city = pickFirst([
       placemark?.locality,
       placemark?.subAdministrativeArea,
-      placemark?.subLocality,
     ], locationText);
     final province = pickFirst([
       placemark?.administrativeArea,
@@ -649,20 +582,20 @@ class _HomePageState extends State<HomePage> {
       'city': city,
       'province': province,
       'postalCode': postalCode,
+      'rt': placemark?.subThoroughfare?.trim().isNotEmpty == true
+          ? placemark?.subThoroughfare?.trim()
+          : null,
+      'rw': placemark?.thoroughfare?.trim().isNotEmpty == true
+          ? placemark?.thoroughfare?.trim()
+          : null,
       'isDefault': true,
     };
   }
 
-  Future<bool> _saveDetectedLocationToDatabase(
+  Future<void> _saveDetectedLocationToDatabase(
     Placemark? placemark,
     String locationText,
   ) async {
-    final token = await getAuthToken();
-    if (token == null || token.isEmpty) {
-      debugPrint('Gagal menyimpan lokasi: belum login.');
-      return false;
-    }
-
     final payload = _buildDetectedAddressPayload(placemark, locationText);
 
     try {
@@ -678,24 +611,21 @@ class _HomePageState extends State<HomePage> {
               (address) => address['isDefault'] == true,
             );
             final targetIndex = defaultIndex >= 0 ? defaultIndex : 0;
-            final patchResponse = await patchJsonWithFallback(
+            await patchJsonWithFallback(
               path: '/auth/addresses/$targetIndex',
               body: jsonEncode(payload),
             );
-            return patchResponse.statusCode >= 200 &&
-                patchResponse.statusCode < 300;
+            return;
           }
         }
       }
 
-      final postResponse = await postJsonWithFallback(
+      await postJsonWithFallback(
         path: '/auth/addresses',
         body: jsonEncode(payload),
       );
-      return postResponse.statusCode >= 200 && postResponse.statusCode < 300;
     } catch (error) {
       debugPrint('Gagal menyimpan lokasi ke database: $error');
-      return false;
     }
   }
 
@@ -776,10 +706,7 @@ class _HomePageState extends State<HomePage> {
         locationText = 'Lokasi terdeteksi';
       }
 
-      final savedToDatabase = await _saveDetectedLocationToDatabase(
-        detectedPlacemark,
-        locationText,
-      );
+      await _saveDetectedLocationToDatabase(detectedPlacemark, locationText);
 
       final previousLocationText = _detectedLocationText;
       final prefs = await SharedPreferences.getInstance();
@@ -794,14 +721,8 @@ class _HomePageState extends State<HomePage> {
         _accountAddressController.text = locationText;
       });
 
-      if (savedToDatabase) {
-        if (previousLocationText != locationText) {
-          _showMessage('Lokasi berhasil dideteksi dan disimpan: $locationText');
-        }
-      } else {
-        _showMessage(
-          'Lokasi terdeteksi: $locationText. Gagal simpan ke akun, coba login ulang.',
-        );
+      if (previousLocationText != locationText) {
+        _showMessage('Lokasi berhasil dideteksi: $locationText');
       }
     } catch (error) {
       _showMessage('Gagal detect lokasi: $error');
@@ -1347,8 +1268,6 @@ class _HomePageState extends State<HomePage> {
           child: AccountPage(
             username: _currentAccountName ?? 'Guest',
             email: _currentAccountEmail ?? 'No email',
-            locationStatus: _locationStatus,
-            locationText: _detectedLocationText,
             isDarkMode: _darkMode,
             onToggleDarkMode: _setDarkMode,
             onDetectLocation: _detectCurrentLocation,
@@ -1419,6 +1338,7 @@ class _HomePageState extends State<HomePage> {
       data: pageTheme,
       child: Scaffold(
         backgroundColor: _pageBackgroundColor,
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(titles[_selectedIndex]),
           centerTitle: false,
@@ -1514,12 +1434,59 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Card(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+    return Column(
+      children: [
+        Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ringkasan Keranjang',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [const Text('Subtotal'), Text('Rp $_cartTotal')],
+                ),
+                if (_discountAmount > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Diskon voucher'),
+                      Text('- Rp $_discountAmount'),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Total Bayar',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Rp $_finalCartTotal',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_recommendedVoucher != null && _appliedVoucherCode == null) ...[
+          Card(
+            color: Colors.green.shade50,
+            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -1529,240 +1496,180 @@ class _HomePageState extends State<HomePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Ringkasan Keranjang',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    'Voucher terbaik untuk keranjang Anda',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [const Text('Subtotal'), Text('Rp $_cartTotal')],
-                  ),
-                  if (_discountAmount > 0) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Diskon voucher'),
-                        Text('- Rp $_discountAmount'),
-                      ],
+                  const SizedBox(height: 8),
+                  Text(_recommendedVoucher!.title),
+                  const SizedBox(height: 4),
+                  Text(_recommendedVoucher!.description),
+                  if (_recommendedVoucher!.minCartValue != null)
+                    Text(
+                      'Syarat: minimal belanja Rp ${_recommendedVoucher!.minCartValue}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
                     ),
-                  ],
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total Bayar',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                  if (_recommendedVoucher!.requiredCategory != null)
+                    Text(
+                      'Kategori: ${_recommendedVoucher!.requiredCategory}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
                       ),
-                      Text(
-                        'Rp $_finalCartTotal',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => _applyVoucher(_recommendedVoucher!.id),
+                      child: const Text('Gunakan voucher ini'),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-        ),
-        if (_recommendedVoucher != null && _appliedVoucherCode == null)
-          SliverToBoxAdapter(
-            child: Card(
-              color: Colors.green.shade50,
-              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Voucher terbaik untuk keranjang Anda',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(_recommendedVoucher!.title),
-                    const SizedBox(height: 4),
-                    Text(_recommendedVoucher!.description),
-                    if (_recommendedVoucher!.minCartValue != null)
-                      Text(
-                        'Syarat: minimal belanja Rp ${_recommendedVoucher!.minCartValue}',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 12,
-                        ),
-                      ),
-                    if (_recommendedVoucher!.requiredCategory != null)
-                      Text(
-                        'Kategori: ${_recommendedVoucher!.requiredCategory}',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 12,
-                        ),
-                      ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: () => _applyVoucher(_recommendedVoucher!.id),
-                        child: const Text('Gunakan voucher ini'),
-                      ),
-                    ),
-                  ],
+        ],
+        Expanded(
+          child: ListView.separated(
+            itemCount: _cart.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            itemBuilder: (context, idx) {
+              final ci = _cart[idx];
+              return Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
                 ),
-              ),
-            ),
-          ),
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, idx) {
-                final ci = _cart[idx];
-                return Padding(
-                  padding: EdgeInsets.only(bottom: idx < _cart.length - 1 ? 12 : 0),
-                  child: Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    elevation: 1,
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          if (ci.item.imageUrl != null)
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                buildApiUrl(ci.item.imageUrl!),
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      if (ci.item.imageUrl != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            buildApiUrl(ci.item.imageUrl!),
+                            width: 70,
+                            height: 70,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
                                 width: 70,
                                 height: 70,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: 70,
-                                    height: 70,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(Icons.image_not_supported),
-                                  );
-                                },
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.image_not_supported),
+                              );
+                            },
+                          ),
+                        )
+                      else
+                        Container(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.image_not_supported),
+                        ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              ci.item.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
                               ),
-                            )
-                          else
-                            Container(
-                              width: 70,
-                              height: 70,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.image_not_supported),
                             ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  ci.item.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                            const SizedBox(height: 6),
+                            Text('Rp ${ci.item.price} x ${ci.quantity}'),
+                            if (ci.item.discountPercent != null &&
+                                ci.item.discountPercent! > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '${ci.item.discountPercent}% OFF',
+                                  style: TextStyle(
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const SizedBox(height: 6),
-                                Text('Rp ${ci.item.price} x ${ci.quantity}'),
-                                if (ci.item.discountPercent != null &&
-                                    ci.item.discountPercent! > 0)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 6),
-                                    child: Text(
-                                      '${ci.item.discountPercent}% OFF',
-                                      style: TextStyle(
-                                        color: Colors.green.shade700,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: () {
+                              if (ci.quantity > 1) {
+                                setState(() {
+                                  _cart[idx] = ci.copyWith(
+                                    quantity: ci.quantity - 1,
+                                  );
+                                });
+                              } else {
+                                _removeFromCart(ci.item.id);
+                              }
+                            },
                           ),
-                          Column(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle_outline),
-                                onPressed: () {
-                                  if (ci.quantity > 1) {
-                                    setState(() {
-                                      _cart[idx] = ci.copyWith(
-                                        quantity: ci.quantity - 1,
-                                      );
-                                    });
-                                  } else {
-                                    _removeFromCart(ci.item.id);
-                                  }
-                                },
-                              ),
-                              Text('${ci.quantity}'),
-                              IconButton(
-                                icon: const Icon(Icons.add_circle_outline),
-                                onPressed: () {
-                                  setState(() {
-                                    _cart[idx] = ci.copyWith(
-                                      quantity: ci.quantity + 1,
-                                    );
-                                  });
-                                },
-                              ),
-                            ],
+                          Text('${ci.quantity}'),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              setState(() {
+                                _cart[idx] = ci.copyWith(
+                                  quantity: ci.quantity + 1,
+                                );
+                              });
+                            },
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                );
-              },
-              childCount: _cart.length,
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _navigateToPaymentPage,
-                  icon: const Icon(Icons.payment),
-                  label: const Text('Bayar'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade700,
+                    ],
                   ),
                 ),
-                FilledButton(
-                  onPressed: () {
-                    setState(() {
-                      _cart.clear();
-                      _appliedVoucherCode = null;
-                      _appliedVoucherDiscountPercent = null;
-                    });
-                    _showMessage('Keranjang dikosongkan.');
-                  },
-                  child: const Text('Kosongkan'),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _navigateToPaymentPage,
+                icon: const Icon(Icons.payment),
+                label: const Text('Bayar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade700,
+                ),
+              ),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _cart.clear();
+                    _appliedVoucherCode = null;
+                    _appliedVoucherDiscountPercent = null;
+                  });
+                  _showMessage('Keranjang dikosongkan.');
+                },
+                child: const Text('Kosongkan'),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -2011,114 +1918,6 @@ class _HomePageState extends State<HomePage> {
     return list;
   }
 
-  Widget _buildHomePage() {
-    final visibleItems = _filteredItems;
-
-    return RefreshIndicator(
-      onRefresh: _loadItems,
-      color: Colors.green.shade700,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          // 1. Bagian Header Bar dibungkus menggunakan SliverToBoxAdapter
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _HeaderBar(
-                  searchController: _searchController,
-                  onFilterPressed: _showFilterSheet,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Item Terbaru',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      '${visibleItems.length} hasil',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-
-          // 2. State Kondisional saat Loading / Kosong / Ada Data
-          if (_isLoading)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            )
-          else if (visibleItems.isEmpty)
-            SliverToBoxAdapter(
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: _surfaceColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _borderColor),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.search_off,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Belum ada item yang cocok.',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Coba ubah kata kunci atau filter untuk menemukan item lain.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            // 3. Grid menggunakan SliverGrid agar lazy-load items bekerja maksimal
-            SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                mainAxisExtent: 310,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _ItemCard(
-                  item: visibleItems[index],
-                  onAddToCart: _addToCart,
-                  onChatSeller: _openSellerChat,
-                ),
-                childCount: visibleItems.length,
-              ),
-            ),
-
-          // 4. Spacer bawah agar tidak terpotong oleh BottomNavigationBar
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 96),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPromoPage() {
     final promoItems = _items
         .where(
@@ -2127,11 +1926,9 @@ class _HomePageState extends State<HomePage> {
               (item.discountPercent != null && item.discountPercent! > 0),
         )
         .toList();
-
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-
     if (promoItems.isEmpty) {
       return Center(
         child: Text(
@@ -2142,7 +1939,6 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -2151,73 +1947,164 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: _borderColor),
       ),
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              margin: const EdgeInsets.only(bottom: 16),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.local_offer, color: Colors.green, size: 28),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Diskon & Promo',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+      child: Column(
+        children: [
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_offer, color: Colors.green, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Diskon & Promo',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Lihat penawaran khusus dan item diskon yang dapat kamu tambahkan ke keranjang.',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Lihat penawaran khusus dan item diskon yang dapat kamu tambahkan ke keranjang.',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-          SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              mainAxisExtent: 300,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) => _ItemCard(
+          Expanded(
+            child: GridView.builder(
+              itemCount: promoItems.length,
+              padding: const EdgeInsets.only(bottom: 90),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                // Increased extent to avoid bottom overflow on smaller devices
+                mainAxisExtent: 440,
+              ),
+              itemBuilder: (context, index) => _ItemCard(
                 item: promoItems[index],
-                compact: true,
                 onAddToCart: _addToCart,
                 onChatSeller: _openSellerChat,
               ),
-              childCount: promoItems.length,
             ),
-          ),
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 90),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildHomePage() {
+    final visibleItems = _filteredItems;
+
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return RefreshIndicator(
+      onRefresh: _loadItems,
+      color: Colors.green.shade700,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.only(bottom: bottomInset + 110),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        children: [
+          _HeaderBar(
+            searchController: _searchController,
+            onFilterPressed: _showFilterSheet,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Item Terbaru',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '${visibleItems.length} hasil',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (visibleItems.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: _surfaceColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _borderColor),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.search_off,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Belum ada item yang cocok.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Coba ubah kata kunci atau filter untuk menemukan item lain.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            GridView.builder(
+              itemCount: visibleItems.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 12),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                // Slightly larger extent to accommodate badges/labels and avoid overflow
+                mainAxisExtent: 400,
+              ),
+              itemBuilder: (context, index) => _ItemCard(
+                item: visibleItems[index],
+                onAddToCart: _addToCart,
+                onChatSeller: _openSellerChat,
+              ),
+            ),
+          const SizedBox(height: 96),
+        ],
+      ),
+    );
+  }
+}
 
 class _HeaderBar extends StatelessWidget {
   const _HeaderBar({
@@ -2324,23 +2211,15 @@ class _HeaderBar extends StatelessWidget {
 }
 
 class _ItemCard extends StatelessWidget {
-  const _ItemCard({
-    required this.item,
-    this.compact = false,
-    this.onAddToCart,
-    this.onChatSeller,
-  });
+  const _ItemCard({required this.item, this.onAddToCart, this.onChatSeller});
 
   final _Item item;
-  final bool compact;
   final void Function(_Item)? onAddToCart;
   final Future<void> Function(_Item)? onChatSeller;
 
   @override
   Widget build(BuildContext context) {
     final isSoldOut = item.quantity <= 0;
-    final imageHeight = compact ? 72.0 : 100.0;
-    final showBottomActions = !compact && !isSoldOut && onChatSeller != null;
 
     return InkWell(
       onTap: () => _showDetail(context),
@@ -2358,7 +2237,6 @@ class _ItemCard extends StatelessWidget {
                 : Colors.black12,
           ),
         ),
-        clipBehavior: Clip.hardEdge,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Stack(
@@ -2372,7 +2250,6 @@ class _ItemCard extends StatelessWidget {
                     opacity: isSoldOut ? 0.55 : 1,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           children: [
@@ -2517,12 +2394,13 @@ class _ItemCard extends StatelessWidget {
                             child: Image.network(
                               buildApiUrl(item.imageUrl!),
                               width: double.infinity,
-                              height: imageHeight,
+                              // slightly smaller image to reduce card height
+                              height: 100,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
                                   width: double.infinity,
-                                  height: imageHeight,
+                                  height: 120,
                                   color: Colors.grey.shade200,
                                   alignment: Alignment.center,
                                   child: Column(
@@ -2551,7 +2429,7 @@ class _ItemCard extends StatelessWidget {
                                     }
                                     return Container(
                                       width: double.infinity,
-                                      height: imageHeight,
+                                      height: 120,
                                       color: Colors.grey.shade200,
                                       alignment: Alignment.center,
                                       child: const SizedBox(
@@ -2565,18 +2443,18 @@ class _ItemCard extends StatelessWidget {
                                   },
                             ),
                           ),
-                          SizedBox(height: compact ? 4 : 6),
+                          const SizedBox(height: 8),
                         ],
                         Text(
                           item.name,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         if (item.discountedPrice != null &&
                             item.discountedPrice! < item.price) ...[
                           Text(
@@ -2609,7 +2487,7 @@ class _ItemCard extends StatelessWidget {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 2),
                         Text(
                           item.location,
                           maxLines: 1,
@@ -2621,69 +2499,131 @@ class _ItemCard extends StatelessWidget {
                             fontSize: 12,
                           ),
                         ),
-                        if (showBottomActions) ...[
+                        if (item.category != null &&
+                            item.category!.isNotEmpty) ...[
                           const SizedBox(height: 4),
+                          Text(
+                            item.category!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.green.shade800,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (item.description != null &&
+                            item.description!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.description!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        if (item.promoNote != null &&
+                            item.promoNote!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.promoNote!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.deepOrange,
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        // Compact action buttons
+                        if (!isSoldOut && onChatSeller != null)
                           Row(
                             children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: onAddToCart == null
-                                      ? null
-                                      : () => onAddToCart!(item),
-                                  icon: const Icon(
-                                    Icons.add_shopping_cart,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Add'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green.shade700,
-                                    minimumSize: const Size(72, 32),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
+                              Flexible(
+                                flex: 1,
+                                child: SizedBox(
+                                  height: 36,
+                                  child: ElevatedButton.icon(
+                                    onPressed: onAddToCart == null
+                                        ? null
+                                        : () => onAddToCart!(item),
+                                    icon: const Icon(
+                                      Icons.add_shopping_cart,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Add'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade700,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
+                              SizedBox(
+                                height: 36,
+                                child: OutlinedButton(
                                   onPressed: () => onChatSeller!(item),
-                                  icon: const Icon(
-                                    Icons.chat_bubble_outline,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Chat'),
                                   style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(72, 32),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    side: BorderSide(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface.withOpacity(0.12),
+                                    ),
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
+                                      horizontal: 12,
                                     ),
                                   ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.chat_bubble_outline, size: 16),
+                                      SizedBox(width: 6),
+                                      Text('Chat'),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
-                          ),
-                        ] else if (!isSoldOut && !compact)
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              ElevatedButton.icon(
-                                onPressed: onAddToCart == null
-                                    ? null
-                                    : () => onAddToCart!(item),
-                                icon: const Icon(
-                                  Icons.add_shopping_cart,
-                                  size: 16,
+                          )
+                        else if (!isSoldOut)
+                          SizedBox(
+                            height: 36,
+                            child: ElevatedButton.icon(
+                              onPressed: onAddToCart == null
+                                  ? null
+                                  : () => onAddToCart!(item),
+                              icon: const Icon(
+                                Icons.add_shopping_cart,
+                                size: 16,
+                              ),
+                              label: const Text('Add'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green.shade700,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
                                 ),
-                                label: const Text('Add'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green.shade700,
-                                  minimumSize: const Size(72, 36),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
-                            ],
+                            ),
                           )
                         else
                           Row(
