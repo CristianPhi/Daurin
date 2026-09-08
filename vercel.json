@@ -2,19 +2,19 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/api/index.ts",
+      "src": "backend/index.ts",
       "use": "@vercel/node"
     }
   ],
   "functions": {
-    "backend/api/index.ts": {
+    "backend/index.ts": {
       "maxDuration": 60
     }
   },
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "backend/api/index.ts"
+      "dest": "backend/index.ts"
     }
   ]
 }
