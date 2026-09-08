@@ -61,7 +61,7 @@ function sanitizeMongoUri(uri: string): string {
 
           if (!mongoUri) {
             throw new Error(
-              'MONGODB_URI is missing. Set it in Railway Variables for the production service.',
+              'MONGODB_URI is missing. Set it in the deployment environment variables.',
             );
           }
 
