@@ -2582,9 +2582,10 @@ class _ItemCard extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     side: BorderSide(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurface.withOpacity(0.12),
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.12),
                                     ),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 12,

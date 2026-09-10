@@ -24,24 +24,24 @@ class Address {
   bool isDefault;
 
   Map<String, dynamic> toJson() => {
-        'street': street,
-        'city': city,
-        'province': province,
-        'postalCode': postalCode,
-        'rt': rt,
-        'rw': rw,
-        'isDefault': isDefault,
-      };
+    'street': street,
+    'city': city,
+    'province': province,
+    'postalCode': postalCode,
+    'rt': rt,
+    'rw': rw,
+    'isDefault': isDefault,
+  };
 
   factory Address.fromJson(Map<String, dynamic> json) => Address(
-        street: json['street'] ?? '',
-        city: json['city'] ?? '',
-        province: json['province'] ?? '',
-        postalCode: json['postalCode'] ?? '',
-        rt: json['rt'],
-        rw: json['rw'],
-        isDefault: json['isDefault'] ?? false,
-      );
+    street: json['street'] ?? '',
+    city: json['city'] ?? '',
+    province: json['province'] ?? '',
+    postalCode: json['postalCode'] ?? '',
+    rt: json['rt'],
+    rw: json['rw'],
+    isDefault: json['isDefault'] ?? false,
+  );
 }
 
 class ManageAddressesPage extends StatefulWidget {
@@ -78,9 +78,9 @@ class _ManageAddressesPageState extends State<ManageAddressesPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -103,9 +103,9 @@ class _ManageAddressesPageState extends State<ManageAddressesPage> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -113,17 +113,14 @@ class _ManageAddressesPageState extends State<ManageAddressesPage> {
     final isEditing = editIndex != null;
     final address = isEditing
         ? _addresses[editIndex]
-        : Address(
-            street: '',
-            city: '',
-            province: '',
-            postalCode: '',
-          );
+        : Address(street: '', city: '', province: '', postalCode: '');
 
     final streetController = TextEditingController(text: address.street);
     final cityController = TextEditingController(text: address.city);
     final provinceController = TextEditingController(text: address.province);
-    final postalCodeController = TextEditingController(text: address.postalCode);
+    final postalCodeController = TextEditingController(
+      text: address.postalCode,
+    );
     final rtController = TextEditingController(text: address.rt ?? '');
     final rwController = TextEditingController(text: address.rw ?? '');
     bool isDefault = address.isDefault;
@@ -252,17 +249,19 @@ class _ManageAddressesPageState extends State<ManageAddressesPage> {
                               );
                             }
 
-                            if (!mounted) return;
+                            if (!sheetContext.mounted) return;
                             Navigator.of(sheetContext).pop();
                             _loadAddresses();
                           } catch (e) {
-                            if (!mounted) return;
+                            if (!ctx.mounted) return;
                             ScaffoldMessenger.of(ctx).showSnackBar(
                               SnackBar(content: Text('Error: $e')),
                             );
                           }
                         },
-                        child: Text(isEditing ? 'Update Address' : 'Add Address'),
+                        child: Text(
+                          isEditing ? 'Update Address' : 'Add Address',
+                        ),
                       ),
                     ),
                   ],
@@ -282,52 +281,52 @@ class _ManageAddressesPageState extends State<ManageAddressesPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _addresses.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.location_off, size: 64),
-                      const SizedBox(height: 16),
-                      const Text('No addresses yet'),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () => _showAddressForm(),
-                        child: const Text('Add Address'),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.location_off, size: 64),
+                  const SizedBox(height: 16),
+                  const Text('No addresses yet'),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => _showAddressForm(),
+                    child: const Text('Add Address'),
                   ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _addresses.length,
-                  itemBuilder: (ctx, i) {
-                    final addr = _addresses[i];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        title: Text(addr.street),
-                        subtitle: Text(
-                          '${addr.city}, ${addr.province} ${addr.postalCode}${addr.rt != null ? ' RT ${addr.rt}' : ''}${addr.rw != null ? ' RW ${addr.rw}' : ''}',
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _addresses.length,
+              itemBuilder: (ctx, i) {
+                final addr = _addresses[i];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    title: Text(addr.street),
+                    subtitle: Text(
+                      '${addr.city}, ${addr.province} ${addr.postalCode}${addr.rt != null ? ' RT ${addr.rt}' : ''}${addr.rw != null ? ' RW ${addr.rw}' : ''}',
+                    ),
+                    trailing: PopupMenuButton(
+                      itemBuilder: (ctx) => [
+                        PopupMenuItem(
+                          child: const Text('Edit'),
+                          onTap: () => _showAddressForm(editIndex: i),
                         ),
-                        trailing: PopupMenuButton(
-                          itemBuilder: (ctx) => [
-                            PopupMenuItem(
-                              child: const Text('Edit'),
-                              onTap: () => _showAddressForm(editIndex: i),
-                            ),
-                            PopupMenuItem(
-                              child: const Text('Delete'),
-                              onTap: () => _deleteAddress(i),
-                            ),
-                          ],
+                        PopupMenuItem(
+                          child: const Text('Delete'),
+                          onTap: () => _deleteAddress(i),
                         ),
-                        leading: addr.isDefault
-                            ? const Icon(Icons.check_circle)
-                            : null,
-                      ),
-                    );
-                  },
-                ),
+                      ],
+                    ),
+                    leading: addr.isDefault
+                        ? const Icon(Icons.check_circle)
+                        : null,
+                  ),
+                );
+              },
+            ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddressForm(),
         child: const Icon(Icons.add),

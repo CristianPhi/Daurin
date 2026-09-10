@@ -61,6 +61,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
     // ... later in the ChatPage call:
 
+    if (!context.mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatPage(
